@@ -205,7 +205,7 @@ async function length(callback?: (len: number)=>unknown) {
 }
 
 async function key(index: number, callback?: (key: string)=>unknown) {
-    const key = (await keys())[index];
+    const key = (await keys.call(this))[index];
     if (key) {
         if (callback)
             callback(key);
