@@ -59,21 +59,44 @@ async function _initStorage(options: any) {
     });
 
     await util.loadScript("https://accounts.google.com/gsi/client");
-    await new Promise(async res => {
+
+    // Check if we already have a saved token
+    let savedToken: string | null = null;
+    if (options.localforage)
+        savedToken = await options.localforage.getItem("google-drive-token");
+
+    await new Promise<void>(async res => {
         this.gdTokenClient = google.accounts.oauth2.initTokenClient({
             client_id: options.googleDrive.clientId,
             scope: "https://www.googleapis.com/auth/drive.file",
             callback: res
         });
 
+        if (savedToken) {
+            gapi.client.setToken(savedToken);
+
+            // Check if the token is valid
+            try {
+                const files = await gapi.client.drive.files.list({
+                    fields: "files(id)",
+                    q: '"root" in parents and name = "expired-token-test"'
+                });
+            } catch (ex) {
+                gapi.client.setToken(null);
+            }
+        }
+
         if (gapi.client.getToken() === null) {
             // Prompt the user to log in
             await options.googleDrive.requestLogin();
             this.gdTokenClient.requestAccessToken({prompt: 'consent'});
         } else {
-            this.gdTokenClient.requestAccessToken({prompt: ''});
+            res();
         }
     });
+
+    if (options.localforage)
+        await options.localforage.setItem("google-drive-token", gapi.client.getToken());
 
     // Create the store path
     const path = util.cloudDirectory(options);
@@ -96,12 +119,13 @@ async function _initStorage(options: any) {
         curDir = nextDir;
     }
     this.gdName = options.name || "default";
+    this.gdPath = path;
     this.gdDir = curDir;
 }
 
 async function iterate(
     iteratorCallback: (key: string) => any,
-    successCallback: () => unknown
+    successCallback?: () => unknown
 ) {
     const files = await fileList(this.gdDir);
     for (const file of files) {
@@ -150,7 +174,7 @@ async function setItem(key: string, value: any, callback?: ()=>unknown) {
     // Serialize the value
     const valSer = ser.serialize(value);
 
-    // Create the file (FIXME: what if it already exists?)
+    // Create the file
     const accessToken = gapi.client.getToken().access_token;
     const form = new FormData();
     form.append("metadata", new Blob([JSON.stringify({
@@ -234,41 +258,21 @@ async function dropInstance(
 
     // Figure out which directory to delete
     let toDelete: string = this.gdDir;
-    if (options) {
-        let toDeleteDir: string | null = null;
-        if (options.name) {
-            if (options.storeName) {
-                toDeleteDir = util.cloudDirectory(options);
-            } else {
-                toDeleteDir = util.cloudDirectory({
-                    name: options.name,
-                    nonlocalForage: {noStore: true}
-                });
+    const toDeleteDir = util.dropInstanceDirectory(this.gdPath, options);
+    if (toDeleteDir !== this.gdPath) {
+        const parts = toDeleteDir.split("/");
+        let curDir = "root";
+        for (const part of parts) {
+            const files = await fileList(curDir, part);
+            if (!files.length) {
+                // Doesn't exist, don't delete it!
+                if (callback)
+                    callback();
+                return;
             }
-        } else {
-            if (options.storeName) {
-                toDeleteDir = util.cloudDirectory({
-                    name: this.gdName,
-                    storeName: options.storeName
-                });
-            }
+            curDir = files[0].id;
         }
-
-        if (toDeleteDir) {
-            const parts = toDeleteDir.split("/");
-            let curDir = "root";
-            for (const part of parts) {
-                const files = await fileList(curDir, part);
-                if (!files.length) {
-                    // Doesn't exist, don't delete it!
-                    if (callback)
-                        callback();
-                    return;
-                }
-                curDir = files[0].id;
-            }
-            toDelete = curDir;
-        }
+        toDelete = curDir;
     }
 
     // Delete as requested
