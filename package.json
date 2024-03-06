@@ -3,9 +3,9 @@
   "version": "0.0.1",
   "description": "localForage drivers for NON-local storage, to the user's cloud storage",
   "main": "dist/nonlocalforage.min.js",
-  "dependencies": {},
   "devDependencies": {
     "browserify": "^17.0.0",
+    "dropbox": "^10.34.0",
     "localforage": "^1.10.0",
     "typescript": "^5.3.3"
   },

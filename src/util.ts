@@ -35,3 +35,34 @@ export function cloudDirectory(options: any) {
     }
     return ret;
 }
+
+export function dropInstanceDirectory(
+    cloudDir: string,
+    options?: { name?: string, storeName?: string }
+) {
+    if (options) {
+        let toDeleteDir: string | null = null;
+        if (options.name) {
+            if (options.storeName) {
+                toDeleteDir = cloudDirectory(options);
+            } else {
+                toDeleteDir = cloudDirectory({
+                    name: options.name,
+                    nonlocalForage: {noStore: true}
+                });
+            }
+        } else {
+            if (options.storeName) {
+                toDeleteDir = cloudDirectory({
+                    name: cloudDir,
+                    storeName: options.storeName
+                });
+            }
+        }
+
+        if (toDeleteDir)
+            return toDeleteDir;
+    }
+
+    return cloudDir;
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Logging in to Dropbox...</title>
+        <meta charset="utf8" />
+    </head>
+    <body>
+        <script type="text/javascript">(function() {
+            const url = new URL(document.location.href);
+            let accessToken = null;
+            try {
+                const hashParams = new URLSearchParams(url.hash.slice(1));
+                accessToken = hashParams.get("access_token");
+            } catch (ex) {}
+            if (accessToken) {
+                window.opener.postMessage({
+                    dropbox: true,
+                    accessToken: accessToken
+                });
+            } else {
+                window.addEventListener("message", function(ev) {
+                    console.log(ev);
+                    if (ev.data && ev.data.dropbox && ev.data.authUrl)
+                        document.location.href = ev.data.authUrl;
+                });
+            }
+        })();</script>
+    </body>
+</html>
