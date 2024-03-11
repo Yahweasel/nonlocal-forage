@@ -22,8 +22,15 @@ interface CacheForage {
     nonlocal: typeof localforageT
 }
 
-async function _initStorage(options: any) {
-    this.cacheForage = <CacheForage> {
+type LocalforageCacheForage = typeof localforageT & {
+    cacheForage: CacheForage
+};
+
+async function _initStorage(
+    this: LocalforageCacheForage,
+    options: any
+) {
+    this.cacheForage = {
         localPromise: Promise.all([]),
         nonlocalPromise: Promise.all([]),
         local: options.cacheForage.local,
@@ -32,10 +39,11 @@ async function _initStorage(options: any) {
 }
 
 async function iterate(
+    this: LocalforageCacheForage,
     iteratorCallback: (key: string) => any,
     successCallback: () => unknown
 ) {
-    const cf = <CacheForage> this.cacheForage;
+    const cf = this.cacheForage;
 
     const promise = cf.nonlocalPromise.then(async () => {
         await cf.local.iterate(iteratorCallback);
@@ -48,8 +56,11 @@ async function iterate(
         successCallback();
 }
 
-async function getItem(key: string, callback?: (value:any)=>unknown) {
-    const cf = <CacheForage> this.cacheForage;
+async function getItem(
+    this: LocalforageCacheForage,
+    key: string, callback?: (value:any)=>unknown
+) {
+    const cf = this.cacheForage;
     const localPromise = cf.localPromise.then(() => {
         return cf.local.getItem(key);
     });
@@ -70,8 +81,11 @@ async function getItem(key: string, callback?: (value:any)=>unknown) {
     return value;
 }
 
-async function setItem(key: string, value: any, callback?: ()=>unknown) {
-    const cf = <CacheForage> this.cacheForage;
+async function setItem(
+    this: LocalforageCacheForage,
+    key: string, value: any, callback?: ()=>unknown
+) {
+    const cf = this.cacheForage;
     const localPromise = cf.localPromise.then(() =>  {
         return cf.local.setItem(key, value);
     });
@@ -87,8 +101,11 @@ async function setItem(key: string, value: any, callback?: ()=>unknown) {
         callback();
 }
 
-async function removeItem(key: string, callback?: ()=>unknown) {
-    const cf = <CacheForage> this.cacheForage;
+async function removeItem(
+    this: LocalforageCacheForage,
+    key: string, callback?: ()=>unknown
+) {
+    const cf = this.cacheForage;
 
     const lp = cf.localPromise.then(() => {
         return cf.local.removeItem(key);
@@ -106,8 +123,11 @@ async function removeItem(key: string, callback?: ()=>unknown) {
         callback();
 }
 
-async function clear(callback?: ()=>unknown) {
-    const cf = <CacheForage> this.cacheForage;
+async function clear(
+    this: LocalforageCacheForage,
+    callback?: ()=>unknown
+) {
+    const cf = this.cacheForage;
 
     const lp = cf.localPromise.then(() => {
         return cf.local.clear();
@@ -125,14 +145,20 @@ async function clear(callback?: ()=>unknown) {
         callback();
 }
 
-async function length(callback?: (len: number)=>unknown) {
+async function length(
+    this: LocalforageCacheForage,
+    callback?: (len: number)=>unknown
+) {
     const len = (await keys.call(this)).length;
     if (callback)
         callback(len);
     return len;
 }
 
-async function key(index: number, callback?: (key: string)=>unknown) {
+async function key(
+    this: LocalforageCacheForage,
+    index: number, callback?: (key: string)=>unknown
+) {
     const key = (await keys.call(this))[index];
     if (key) {
         if (callback)
@@ -142,8 +168,11 @@ async function key(index: number, callback?: (key: string)=>unknown) {
     throw new Error("Key does not exist");
 }
 
-async function keys(callback?: (keys: string[])=>unknown) {
-    const cf = <CacheForage> this.cacheForage;
+async function keys(
+    this: LocalforageCacheForage,
+    callback?: (keys: string[])=>unknown
+) {
+    const cf = this.cacheForage;
     const lkeysP = cf.localPromise.then(() => {
         return cf.local.keys();
     });
@@ -157,10 +186,11 @@ async function keys(callback?: (keys: string[])=>unknown) {
 }
 
 async function dropInstance(
+    this: LocalforageCacheForage,
     options?: {name?: string, storeName?: string},
     callback?: () => unknown
 ) {
-    const cf = <CacheForage> this.cacheForage;
+    const cf = this.cacheForage;
     const lp = cf.localPromise.then(() => {
         return cf.local.dropInstance(options);
     });

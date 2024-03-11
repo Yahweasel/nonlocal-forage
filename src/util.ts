@@ -15,7 +15,7 @@
 
 import * as ser from "./serializer";
 
-export async function loadScript(src) {
+export async function loadScript(src: string) {
     const scr = document.createElement("script");
     scr.src = src;
     document.body.appendChild(scr);

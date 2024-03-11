@@ -23,12 +23,23 @@ declare let gapi: any, google: any;
 
 const dirMime = "application/vnd.google-apps.folder";
 
+interface GoogleDriveData {
+    tokenClient: any;
+    name: string;
+    path: string;
+    dirId: string;
+}
+
+type LocalforageGoogleDrive = typeof localforageT & {
+    gd: GoogleDriveData
+};
+
 async function fileList(dir = "root", name = "") {
     let files: any[] = [];
     let nextPageToken: string | undefined = void 0;
     while (true) {
         try {
-            const resp = await gapi.client.drive.files.list({
+            const resp: any = await gapi.client.drive.files.list({
                 pageToken: nextPageToken,
                 fields: "files(id, name, mimeType), nextPageToken",
                 q: (`${JSON.stringify(dir)} in parents` +
@@ -50,7 +61,10 @@ async function fileList(dir = "root", name = "") {
     return files;
 }
 
-async function _initStorage(options: any) {
+async function _initStorage(
+    this: LocalforageGoogleDrive,
+    options: any
+) {
     await util.loadScript("https://apis.google.com/js/api.js");
     await new Promise(res => gapi.load('client', res));
     await gapi.client.init({
@@ -60,13 +74,15 @@ async function _initStorage(options: any) {
 
     await util.loadScript("https://accounts.google.com/gsi/client");
 
+    this.gd = <any> {};
+
     // Check if we already have a saved token
     let savedToken: string | null = null;
     if (options.localforage)
         savedToken = await options.localforage.getItem("google-drive-token");
 
     await new Promise<void>(async res => {
-        this.gdTokenClient = google.accounts.oauth2.initTokenClient({
+        this.gd.tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: options.googleDrive.clientId,
             scope: "https://www.googleapis.com/auth/drive.file",
             callback: res
@@ -89,7 +105,7 @@ async function _initStorage(options: any) {
         if (gapi.client.getToken() === null) {
             // Prompt the user to log in
             await options.googleDrive.requestLogin();
-            this.gdTokenClient.requestAccessToken({prompt: 'consent'});
+            this.gd.tokenClient.requestAccessToken({prompt: 'consent'});
         } else {
             res();
         }
@@ -116,18 +132,19 @@ async function _initStorage(options: any) {
             nextDir = resp.result.id;
         }
 
-        curDir = nextDir;
+        curDir = nextDir!;
     }
-    this.gdName = options.name || "default";
-    this.gdPath = path;
-    this.gdDir = curDir;
+    this.gd.name = options.name || "default";
+    this.gd.path = path;
+    this.gd.dirId = curDir;
 }
 
 async function iterate(
+    this: LocalforageGoogleDrive,
     iteratorCallback: (key: string) => any,
     successCallback?: () => unknown
 ) {
-    const files = await fileList(this.gdDir);
+    const files = await fileList(this.gd.dirId);
     for (const file of files) {
         const value = await getItemById(file.id);
         const res = iteratorCallback(ser.unsafeify(file.name));
@@ -139,9 +156,12 @@ async function iterate(
         successCallback();
 }
 
-async function getItem(key: string, callback?: (value: any)=>unknown) {
+async function getItem(
+    this: LocalforageGoogleDrive,
+    key: string, callback?: (value: any)=>unknown
+) {
     // Look for a connected file
-    const files = await fileList(this.gdDir, ser.safeify(key));
+    const files = await fileList(this.gd.dirId, ser.safeify(key));
     if (!files.length) {
         if (callback)
             callback(null);
@@ -170,7 +190,10 @@ async function getItemById(id: string) {
     return await ser.deserialize(body);
 }
 
-async function setItem(key: string, value: any, callback?: ()=>unknown) {
+async function setItem(
+    this: LocalforageGoogleDrive,
+    key: string, value: any, callback?: ()=>unknown
+) {
     // Serialize
     const keySer = ser.safeify(key);
     const valSer = ser.serialize(value);
@@ -179,7 +202,7 @@ async function setItem(key: string, value: any, callback?: ()=>unknown) {
     const accessToken = gapi.client.getToken().access_token;
     const form = new FormData();
     form.append("metadata", new Blob([JSON.stringify({
-        parents: [this.gdDir],
+        parents: [this.gd.dirId],
         name: keySer
     })], { type: "application/json" }));
     form.append("file", new Blob([valSer]));
@@ -193,7 +216,7 @@ async function setItem(key: string, value: any, callback?: ()=>unknown) {
     const file = await fres.json();
 
     // Look for any other instances
-    const files = await fileList(this.gdDir, keySer);
+    const files = await fileList(this.gd.dirId, keySer);
     for (const otherFile of files) {
         if (otherFile.id === file.id)
             continue;
@@ -206,8 +229,11 @@ async function setItem(key: string, value: any, callback?: ()=>unknown) {
         callback();
 }
 
-async function removeItem(key: string, callback?: ()=>unknown) {
-    const files = await fileList(this.gdDir, ser.safeify(key));
+async function removeItem(
+    this: LocalforageGoogleDrive,
+    key: string, callback?: ()=>unknown
+) {
+    const files = await fileList(this.gd.dirId, ser.safeify(key));
     for (const file of files) {
         await gapi.client.drive.files.delete({
             fileId: file.id
@@ -218,18 +244,27 @@ async function removeItem(key: string, callback?: ()=>unknown) {
         callback();
 }
 
-async function clear(callback?: ()=>unknown) {
-    await removeItem("", callback);
+async function clear(
+    this: LocalforageGoogleDrive,
+    callback?: ()=>unknown
+) {
+    await removeItem.call(this, "", callback);
 }
 
-async function length(callback?: (len: number)=>unknown) {
-    const len = (await fileList(this.gdDir)).length;
+async function length(
+    this: LocalforageGoogleDrive,
+    callback?: (len: number)=>unknown
+) {
+    const len = (await fileList(this.gd.dirId)).length;
     if (callback)
         callback(len);
     return len;
 }
 
-async function key(index: number, callback?: (key: string)=>unknown) {
+async function key(
+    this: LocalforageGoogleDrive,
+    index: number, callback?: (key: string)=>unknown
+) {
     const key = (await keys.call(this))[index];
     if (key) {
         if (callback)
@@ -239,8 +274,11 @@ async function key(index: number, callback?: (key: string)=>unknown) {
     throw new Error("Key does not exist");
 }
 
-async function keys(callback?: (keys: string[])=>unknown) {
-    const files = await fileList(this.gdDir);
+async function keys(
+    this: LocalforageGoogleDrive,
+    callback?: (keys: string[])=>unknown
+) {
+    const files = await fileList(this.gd.dirId);
     const keys = files.map(x => ser.unsafeify(x.name));
     if (callback)
         callback(keys);
@@ -248,6 +286,7 @@ async function keys(callback?: (keys: string[])=>unknown) {
 }
 
 async function dropInstance(
+    this: LocalforageGoogleDrive,
     options?: {name?: string, storeName?: string},
     callback?: () => unknown
 ) {
@@ -258,9 +297,9 @@ async function dropInstance(
     }
 
     // Figure out which directory to delete
-    let toDelete: string = this.gdDir;
-    const toDeleteDir = util.dropInstanceDirectory(this.gdPath, options);
-    if (toDeleteDir !== this.gdPath) {
+    let toDelete: string = this.gd.dirId;
+    const toDeleteDir = util.dropInstanceDirectory(this.gd.path, options);
+    if (toDeleteDir !== this.gd.path) {
         const parts = toDeleteDir.split("/");
         let curDir = "root";
         for (const part of parts) {
