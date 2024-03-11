@@ -130,7 +130,7 @@ async function iterate(
     const files = await fileList(this.gdDir);
     for (const file of files) {
         const value = await getItemById(file.id);
-        const res = iteratorCallback(file.name);
+        const res = iteratorCallback(ser.unsafeify(file.name));
         if (res !== void 0)
             break;
     }
@@ -141,7 +141,7 @@ async function iterate(
 
 async function getItem(key: string, callback?: (value: any)=>unknown) {
     // Look for a connected file
-    const files = await fileList(this.gdDir, key);
+    const files = await fileList(this.gdDir, ser.safeify(key));
     if (!files.length) {
         if (callback)
             callback(null);
@@ -171,7 +171,8 @@ async function getItemById(id: string) {
 }
 
 async function setItem(key: string, value: any, callback?: ()=>unknown) {
-    // Serialize the value
+    // Serialize
+    const keySer = ser.safeify(key);
     const valSer = ser.serialize(value);
 
     // Create the file
@@ -179,7 +180,7 @@ async function setItem(key: string, value: any, callback?: ()=>unknown) {
     const form = new FormData();
     form.append("metadata", new Blob([JSON.stringify({
         parents: [this.gdDir],
-        name: key
+        name: keySer
     })], { type: "application/json" }));
     form.append("file", new Blob([valSer]));
     const fres = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
@@ -192,7 +193,7 @@ async function setItem(key: string, value: any, callback?: ()=>unknown) {
     const file = await fres.json();
 
     // Look for any other instances
-    const files = await fileList(this.gdDir, key);
+    const files = await fileList(this.gdDir, keySer);
     for (const otherFile of files) {
         if (otherFile.id === file.id)
             continue;
@@ -206,7 +207,7 @@ async function setItem(key: string, value: any, callback?: ()=>unknown) {
 }
 
 async function removeItem(key: string, callback?: ()=>unknown) {
-    const files = await fileList(this.gdDir, key);
+    const files = await fileList(this.gdDir, ser.safeify(key));
     for (const file of files) {
         await gapi.client.drive.files.delete({
             fileId: file.id
@@ -240,7 +241,7 @@ async function key(index: number, callback?: (key: string)=>unknown) {
 
 async function keys(callback?: (keys: string[])=>unknown) {
     const files = await fileList(this.gdDir);
-    const keys = files.map(x => <string> x.name);
+    const keys = files.map(x => ser.unsafeify(x.name));
     if (callback)
         callback(keys);
     return keys;

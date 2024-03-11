@@ -120,7 +120,7 @@ async function iterate(
         path: this.dbxDir
     });
     for (const file of files.result.entries)
-        iteratorCallback(file.name);
+        iteratorCallback(ser.unsafeify(file.name));
     if (successCallback)
         successCallback();
 }
@@ -132,7 +132,7 @@ async function getItem(key: string, callback?: (value: any)=>unknown) {
     let value: any = null;
     try {
         const dl = await dbx.filesDownload({
-            path: `${this.dbxDir}/${key}`
+            path: `${this.dbxDir}/${ser.safeify(key)}`
         });
         const fileBlob = <Blob> (<any> dl).result.fileBlob;
         const fileU8 = new Uint8Array(await fileBlob.arrayBuffer());
@@ -152,7 +152,7 @@ async function setItem(key: string, value: any, callback?: ()=>unknown) {
     // Create the file
     const dbx = <dropbox.Dropbox> this.dbx;
     await dbx.filesUpload({
-        path: `${this.dbxDir}/${key}`,
+        path: `${this.dbxDir}/${ser.safeify(key)}`,
         contents: valSer,
         mode: {
             ".tag": "overwrite"
@@ -166,7 +166,7 @@ async function setItem(key: string, value: any, callback?: ()=>unknown) {
 async function removeItem(key: string, callback?: ()=>unknown) {
     const dbx = <dropbox.Dropbox> this.dbx;
     await dbx.filesDeleteV2({
-        path: `${this.dbxDir}/${key}`
+        path: `${this.dbxDir}/${ser.safeify(key)}`
     });
     if (callback)
         callback();
@@ -209,7 +209,7 @@ async function keys(callback?: (keys: string[])=>unknown) {
     const files = await dbx.filesListFolder({
         path: this.dbxDir
     });
-    const keys = files.result.entries.map(x => x.name);
+    const keys = files.result.entries.map(x => ser.unsafeify(x.name));
     if (callback)
         callback(keys);
     return keys;

@@ -13,6 +13,8 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+import * as ser from "./serializer";
+
 export async function loadScript(src) {
     const scr = document.createElement("script");
     scr.src = src;
@@ -29,9 +31,9 @@ export function cloudDirectory(options: any) {
         ret = options.nonlocalForage.directory;
     else
         ret = "nonlocalForage";
-    ret += `/${options.name || "default"}`;
+    ret += `/${options.name ? ser.safeify(options.name) : "default"}`;
     if (!options.nonlocalForage || !options.nonlocalForage.noStore) {
-        ret += `/${options.storeName || "default"}`;
+        ret += `/${options.storeName ? ser.safeify(options.storeName) : "default"}`;
     }
     return ret;
 }

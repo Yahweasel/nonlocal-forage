@@ -131,3 +131,46 @@ export function deserialize(data: Uint8Array) {
 
     return ret;
 }
+
+/**
+ * Make a "safe" version of this string for filename purposes.
+ * @param key  String to turn into a safe filename
+ */
+export function safeify(key: string) {
+    return Array.from(key).map(c => {
+        if (/^[a-z0-9_-]$/.test(c))
+            return c;
+        const cc = c.charCodeAt(0);
+        if (cc <= 0xFF)
+            return `%${cc.toString(16).padStart(2, "0")}`;
+        return `%u${cc.toString(16).padStart(4, "0")}`;
+    }).join("");
+}
+
+/**
+ * Take a "safeified" filename and return the original string. Will return
+ * nonsense if the original string wasn't actually safeified.
+ * @param name  Filename to turn back into a key
+ */
+export function unsafeify(name: string) {
+    let key = "";
+    for (let i = 0; i < name.length; i++) {
+        const c = name[i];
+        if (c !== "%") {
+            key += c;
+            continue;
+        }
+
+        let ccs: string;
+        if (name[i+1] === "u") {
+            ccs = name.slice(i+2, i+6);
+            i += 6;
+        } else {
+            ccs = name.slice(i+1, i+3);
+            i += 3;
+        }
+        key += String.fromCharCode(parseInt(ccs, 16));
+    }
+
+    return key;
+}
