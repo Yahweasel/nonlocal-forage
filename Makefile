@@ -3,3 +3,6 @@ all: node_modules/.bin/tsc
 
 node_modules/.bin/tsc:
 	npm install
+
+clean:
+	npm run clean
