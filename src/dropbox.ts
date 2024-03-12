@@ -15,13 +15,14 @@
 
 import type * as localforageT from "localforage";
 
-import * as dropbox from "dropbox";
+import type * as dropboxT from "dropbox";
+declare let Dropbox: typeof dropboxT;
 
 import * as ser from "./serializer";
 import * as util from "./util";
 
 interface DropboxData {
-    dbx: dropbox.Dropbox;
+    dbx: dropboxT.Dropbox;
     dir: string;
 }
 
@@ -33,9 +34,13 @@ async function _initStorage(
     this: LocalforageDropbox,
     options: any
 ) {
+    // Load the library
+    if (typeof Dropbox === "undefined")
+        await util.loadScript("https://cdn.jsdelivr.net/npm/dropbox@10.34.0");
+
     // Check for an access token in the URL
     const url = new URL(document.location.href);
-    let dbx: dropbox.Dropbox | null = null;
+    let dbx: dropboxT.Dropbox | null = null;
     let hashParams: URLSearchParams | null = null;
     try {
         hashParams = new URLSearchParams(url.hash.slice(1));
@@ -47,13 +52,13 @@ async function _initStorage(
 
     if (savedToken) {
         // Try to use the existing token
-        dbx = new dropbox.Dropbox({
+        dbx = new Dropbox.Dropbox({
             accessToken: savedToken,
         });
 
         // Check if the token works
         try {
-            const auth: dropbox.DropboxAuth = (<any> dbx).auth;
+            const auth: dropboxT.DropboxAuth = (<any> dbx).auth;
             await auth.checkAndRefreshAccessToken();
             await dbx.filesListFolder({
                 path: ""
@@ -64,16 +69,16 @@ async function _initStorage(
     }
 
     if (!dbx) {
-        dbx = new dropbox.Dropbox({clientId: options.dropbox.clientId});
+        dbx = new Dropbox.Dropbox({clientId: options.dropboxT.clientId});
 
         // Need to authenticate
         url.pathname = url.pathname.replace(/\/[^\/]*$/, "/dropbox-login.html");
         url.search = "";
         url.hash = "";
-        let auth: dropbox.DropboxAuth = (<any> dbx).auth;
+        let auth: dropboxT.DropboxAuth = (<any> dbx).auth;
         const aurl = await auth.getAuthenticationUrl(url.toString());
 
-        await options.dropbox.requestLogin();
+        await options.dropboxT.requestLogin();
 
         // Open an authentication iframe
         const authWin = window.open(url.toString(), "", "popup")!;
@@ -99,7 +104,7 @@ async function _initStorage(
 
         authWin.close();
 
-        dbx = new dropbox.Dropbox({accessToken});
+        dbx = new Dropbox.Dropbox({accessToken});
         auth = (<any> dbx).auth;
         if (options.localforage)
             await options.localforage.setItem("dropbox-token", accessToken);
@@ -136,7 +141,7 @@ async function iterate(
     iteratorCallback: (key: string) => any,
     successCallback: () => unknown
 ) {
-    const dbx = <dropbox.Dropbox> this.dbx.dbx;
+    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
     const files = await dbx.filesListFolder({
         path: this.dbx.dir
     });
@@ -150,7 +155,7 @@ async function getItem(
     this: LocalforageDropbox,
     key: string, callback?: (value: any)=>unknown
 ) {
-    const dbx = <dropbox.Dropbox> this.dbx.dbx;
+    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
 
     // Try to download the file
     let value: any = null;
@@ -177,7 +182,7 @@ async function setItem(
     const valSer = ser.serialize(value);
 
     // Create the file
-    const dbx = <dropbox.Dropbox> this.dbx.dbx;
+    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
     await dbx.filesUpload({
         path: `${this.dbx.dir}/${ser.safeify(key)}`,
         contents: valSer,
@@ -194,7 +199,7 @@ async function removeItem(
     this: LocalforageDropbox,
     key: string, callback?: ()=>unknown
 ) {
-    const dbx = <dropbox.Dropbox> this.dbx.dbx;
+    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
     await dbx.filesDeleteV2({
         path: `${this.dbx.dir}/${ser.safeify(key)}`
     });
@@ -206,7 +211,7 @@ async function clear(
     this: LocalforageDropbox,
     callback?: ()=>unknown
 ) {
-    const dbx = <dropbox.Dropbox> this.dbx.dbx;
+    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
     await dbx.filesDeleteV2({
         path: this.dbx.dir
     });
@@ -221,7 +226,7 @@ async function length(
     this: LocalforageDropbox,
     callback?: (len: number)=>unknown
 ) {
-    const dbx = <dropbox.Dropbox> this.dbx.dbx;
+    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
     const files = await dbx.filesListFolder({
         path: this.dbx.dir
     });
@@ -247,7 +252,7 @@ async function keys(
     this: LocalforageDropbox,
     callback?: (keys: string[])=>unknown
 ) {
-    const dbx = <dropbox.Dropbox> this.dbx.dbx;
+    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
     const files = await dbx.filesListFolder({
         path: this.dbx.dir
     });
@@ -271,7 +276,7 @@ async function dropInstance(
     // Figure out which directory to delete
     const toDelete = util.dropInstanceDirectory(this.dbx.dir, options);
 
-    const dbx = <dropbox.Dropbox> this.dbx.dbx;
+    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
     await dbx.filesDeleteV2({
         path: toDelete
     });

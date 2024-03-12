@@ -65,14 +65,16 @@ async function _initStorage(
     this: LocalforageGoogleDrive,
     options: any
 ) {
-    await util.loadScript("https://apis.google.com/js/api.js");
-    await new Promise(res => gapi.load('client', res));
+    if (typeof gapi === "undefined")
+        await util.loadScript("https://apis.google.com/js/api.js");
+    await new Promise(res => gapi.load("client", res));
     await gapi.client.init({
         apiKey: options.googleDrive.apiKey,
         discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
     });
 
-    await util.loadScript("https://accounts.google.com/gsi/client");
+    if (typeof google === "undefined" || !google.accounts)
+        await util.loadScript("https://accounts.google.com/gsi/client");
 
     this.gd = <any> {};
 
