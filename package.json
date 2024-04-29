@@ -1,6 +1,6 @@
 {
   "name": "nonlocal-forage",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "localForage drivers for NON-local storage, to the user's cloud storage",
   "main": "dist/nonlocalforage.min.js",
   "devDependencies": {
