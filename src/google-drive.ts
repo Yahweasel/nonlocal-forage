@@ -83,11 +83,12 @@ async function _initStorage(
     if (options.localforage)
         savedToken = await options.localforage.getItem("google-drive-token");
 
-    await new Promise<void>(async res => {
+    await new Promise<void>(async (res, rej) => {
         this.gd.tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: options.googleDrive.clientId,
             scope: "https://www.googleapis.com/auth/drive.file",
-            callback: res
+            callback: res,
+            error_callback: rej
         });
 
         if (savedToken) {
