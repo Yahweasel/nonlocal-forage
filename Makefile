@@ -1,8 +1,10 @@
-all: node_modules/.bin/tsc
+all: dist/nonlocalforage.js dist/nonlocalforage.min.js
+
+dist/nonlocalforage.js dist/nonlocalforage.min.js: src/*.ts node_modules/.bin/rollup
 	npm run build
 
-node_modules/.bin/tsc:
+node_modules/.bin/rollup:
 	npm install
 
 clean:
-	npm run clean
+	rm -rf dist

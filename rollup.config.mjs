@@ -1,9 +1,8 @@
-import nodeResolve from "@rollup/plugin-node-resolve";
-import commonjs from "@rollup/plugin-commonjs";
+import typescript from "@rollup/plugin-typescript";
 import terser from "@rollup/plugin-terser";
 
 export default {
-    input: "src/main.js",
+    input: "src/main.ts",
     output: [
         {
             file: "dist/nonlocalforage.js",
@@ -12,9 +11,10 @@ export default {
         }, {
             file: "dist/nonlocalforage.min.js",
             format: "umd",
-            name: "NonlocalForage"
+            name: "NonlocalForage",
+            plugins: [terser()]
         }
     ],
     context: "this",
-    plugins: [nodeResolve(), commonjs()]
+    plugins: [typescript()]
 };

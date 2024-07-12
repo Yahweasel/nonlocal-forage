@@ -2,20 +2,18 @@
   "name": "nonlocal-forage",
   "version": "0.0.2",
   "description": "localForage drivers for NON-local storage, to the user's cloud storage",
-  "main": "dist/nonlocalforage.min.js",
+  "main": "dist/nonlocalforage.js",
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^25.0.7",
-    "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^11.1.6",
     "dropbox": "^10.34.0",
     "localforage": "^1.10.0",
     "rollup": "^4.12.1",
-    "typescript": "^5.3.3"
+    "tslib": "^2.6.3"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc && rollup -c",
-    "clean": "rm -f src/*.js"
+    "build": "rollup -c"
   },
   "keywords": [
     "localstorage",
