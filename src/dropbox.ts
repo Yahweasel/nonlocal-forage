@@ -82,8 +82,10 @@ async function _initStorage(
 
         // Open an authentication iframe
         const authWin = window.open(url.toString(), "", "popup")!;
-        await new Promise(res => {
+        await new Promise((res, rej) => {
             authWin.onload = res;
+            authWin.onerror = rej;
+            authWin.onclose = rej;
         });
         authWin.postMessage({
             dropbox: true,
@@ -91,7 +93,7 @@ async function _initStorage(
         });
 
         // Wait for the access token
-        const accessToken: string = await new Promise(res => {
+        const accessToken: string = await new Promise((res, rej) => {
             function onmessage(ev: MessageEvent) {
                 if (ev.data && ev.data.dropbox && ev.data.accessToken) {
                     removeEventListener("message", onmessage);
@@ -100,8 +102,10 @@ async function _initStorage(
             }
 
             addEventListener("message", onmessage);
+            authWin.onclose = rej;
         });
 
+        authWin.onclose = null;
         authWin.close();
 
         dbx = new Dropbox.Dropbox({accessToken});
