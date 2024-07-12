@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Nonlocal Forage</title>
+    <meta charset="utf-8" />
+    <link href='https://cdn.jsdelivr.net/npm/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+  </head>
+  <body>
+    <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.js"></script>
+    <script src="../dist/nonlocalforage.js"></script>
+    <div id="logInButtons" style="display: none;">
+        <button id="googleDriveLogIn"><i class='bx bxl-google' ></i> Google Drive</button>
+        <button id="dropboxLogIn"><i class='bx bxl-dropbox' ></i> Dropbox</button>
+    </div>
+    <button id="logIn" style="display: none;">Log in</button>
+    <script type="text/javascript">(async function() {
+        const gebi = document.getElementById.bind(document);
+
+        // Fill these in to test these clients
+        const DROPBOX_CLIENT_ID = "";
+        const GOOGLE_DRIVE_API_KEY = "";
+        const GOOGLE_DRIVE_CLIENT_ID = "";
+
+        const logIn = gebi("logIn");
+        await localforage.defineDriver(NonlocalForage.cacheForage);
+        await localforage.defineDriver(NonlocalForage.googleDriveLocalForage);
+        await localforage.defineDriver(NonlocalForage.dropboxLocalForage);
+
+        // Store keys in their own localforage instance
+        const keylf = await localforage.createInstance({
+            name: "nonlocal-forage-keys"
+        });
+
+        // Use another instance for our cache
+        const cachelf = await localforage.createInstance({
+            name: "nonlocal-forage-cache"
+        });
+
+        // Wait for a selection
+        gebi("logInButtons").style.display = "";
+        const choice = await Promise.race([
+            new Promise(res => {
+                gebi("googleDriveLogIn").onclick = () => res("googleDrive")
+            }),
+            new Promise(res => {
+                gebi("dropboxLogIn").onclick = () => res("dropbox")
+            })
+        ]);
+        gebi("logInButtons").style.display = "none";
+
+        /* Create our nonlocal-forage instance. Note: You obviously don't need
+         * to provide both a 'dropbox' option and a 'googleDrive' option unless
+         * you don't know which kind you're making! */
+        const nllf = await localforage.createInstance({
+            driver: choice,
+            localforage: keylf,
+            name: "nonlocal-forage-demo",
+            dropbox: {
+                clientId: DROPBOX_CLIENT_ID,
+                requestLogin: async () => {
+                    logIn.style.display = "";
+                    await new Promise(res => logIn.onclick = res);
+                }
+            },
+            googleDrive: {
+                apiKey: GOOGLE_DRIVE_API_KEY,
+                clientId: GOOGLE_DRIVE_CLIENT_ID,
+                requestLogin: async () => {
+                    logIn.style.display = "";
+                    await new Promise(res => logIn.onclick = res);
+                }
+            }
+        });
+        await nllf.ready();
+
+        // Use a cache for performance
+        const clf = await localforage.createInstance({
+            driver: "cacheForage",
+            cacheForage: {
+                local: cachelf,
+                nonlocal: nllf
+            }
+        });
+
+        // And some simple examples
+        await nllf.setItem("Hello", "world");
+        console.log(await clf.getItem("Hello"));
+        console.log(await clf.keys());
+    })();</script>
+  </body>
+</html>
