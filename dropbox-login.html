@@ -19,7 +19,6 @@
                 });
             } else {
                 window.addEventListener("message", function(ev) {
-                    console.log(ev);
                     if (ev.data && ev.data.dropbox && ev.data.authUrl)
                         document.location.href = ev.data.authUrl;
                 });
