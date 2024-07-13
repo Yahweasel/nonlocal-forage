@@ -26,11 +26,9 @@ export async function loadScript(src: string) {
 }
 
 export function cloudDirectory(options: any) {
-    let ret: string;
-    if (options.nonlocalForage && options.nonlocalForage.directory)
-        ret = options.nonlocalForage.directory;
-    else
-        ret = "nonlocalForage";
+    let ret: string = "nonlocalForage";
+    if (options.nonlocalforage && options.nonlocalforage.directory)
+        ret = options.nonlocalforage.directory;
     ret += `/${options.name ? ser.safeify(options.name) : "default"}`;
     if (!options.nonlocalForage || !options.nonlocalForage.noStore) {
         ret += `/${options.storeName ? ser.safeify(options.storeName) : "default"}`;

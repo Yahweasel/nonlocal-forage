@@ -25,6 +25,8 @@ const dirMime = "application/vnd.google-apps.folder";
 
 interface GoogleDriveData {
     tokenClient: any;
+    tokenClientCallback: () => void;
+    tokenClientError: (x: any) => void;
     name: string;
     path: string;
     dirId: string;
@@ -78,44 +80,32 @@ async function _initStorage(
 
     this.gd = <any> {};
 
-    // Check if we already have a saved token
-    let savedToken: string | null = null;
-    if (options.localforage)
-        savedToken = await options.localforage.getItem("google-drive-token");
-
-    await new Promise<void>(async (res, rej) => {
-        this.gd.tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: options.googleDrive.clientId,
-            scope: "https://www.googleapis.com/auth/drive.file",
-            callback: res,
-            error_callback: rej
-        });
-
-        if (savedToken) {
-            gapi.client.setToken(savedToken);
-
-            // Check if the token is valid
-            try {
-                const files = await gapi.client.drive.files.list({
-                    fields: "files(id)",
-                    q: '"root" in parents and name = "expired-token-test"'
-                });
-            } catch (ex) {
-                gapi.client.setToken(null);
-            }
-        }
-
-        if (gapi.client.getToken() === null) {
-            // Prompt the user to log in
-            await options.googleDrive.requestLogin();
-            this.gd.tokenClient.requestAccessToken({prompt: 'consent'});
-        } else {
-            res();
-        }
+    // Create the token client
+    this.gd.tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: options.googleDrive.clientId,
+        scope: "https://www.googleapis.com/auth/drive.file",
+        prompt: (options.nonlocalforage && options.nonlocalforage.forcePrompt)
+            ? "select_account" : "",
+        callback: () => this.gd.tokenClientCallback(),
+        error_callback: (x: any) => this.gd.tokenClientError(x)
     });
 
-    if (options.localforage)
-        await options.localforage.setItem("google-drive-token", gapi.client.getToken());
+    // Attempt to log in without transient activation
+    try {
+        await new Promise<void>((res, rej) => {
+            this.gd.tokenClientCallback = res;
+            this.gd.tokenClientError = rej;
+            this.gd.tokenClient.requestAccessToken();
+        });
+    } catch (ex) {
+        // OK, try with transient activation
+        await options.nonlocalforage.transientActivation();
+        await new Promise<void>((res, rej) => {
+            this.gd.tokenClientCallback = res;
+            this.gd.tokenClientError = rej;
+            this.gd.tokenClient.requestAccessToken();
+        });
+    }
 
     // Create the store path
     const path = util.cloudDirectory(options);

@@ -50,7 +50,7 @@ async function _initStorage(
     if (options.localforage)
         savedToken = await options.localforage.getItem("dropbox-token");
 
-    if (savedToken) {
+    if (savedToken && (!options.nonlocalforage || !options.nonlocalforage.forcePrompt)) {
         // Try to use the existing token
         dbx = new Dropbox.Dropbox({
             accessToken: savedToken,
@@ -78,7 +78,7 @@ async function _initStorage(
         let auth: dropboxT.DropboxAuth = (<any> dbx).auth;
         const aurl = await auth.getAuthenticationUrl(url.toString());
 
-        await options.dropboxT.requestLogin();
+        await options.nonlocalforage.transientActivation();
 
         // Open an authentication iframe
         const authWin = window.open(url.toString(), "", "popup")!;
