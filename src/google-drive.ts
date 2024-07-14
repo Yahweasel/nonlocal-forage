@@ -25,7 +25,7 @@ const dirMime = "application/vnd.google-apps.folder";
 
 interface GoogleDriveData {
     tokenClient: any;
-    tokenClientCallback: () => void;
+    tokenClientCallback: (x: any) => void;
     tokenClientError: (x: any) => void;
     name: string;
     path: string;
@@ -97,32 +97,53 @@ async function _initStorage(
             ? "select_account" : "",
         login_hint: (options.nonlocalforage && options.nonlocalforage.forcePrompt)
             ? void 0 : login_hint,
-        callback: () => this.gd.tokenClientCallback(),
+        callback: (x: any) => this.gd.tokenClientCallback(x),
         error_callback: (x: any) => this.gd.tokenClientError(x)
     });
 
-    // Attempt to log in without transient activation
-    try {
-        await new Promise<void>((res, rej) => {
-            this.gd.tokenClientCallback = res;
-            this.gd.tokenClientError = rej;
-            this.gd.tokenClient.requestAccessToken();
-        });
-    } catch (ex) {
-        // OK, try with transient activation
-        await options.nonlocalforage.transientActivation();
-        await new Promise<void>((res, rej) => {
-            this.gd.tokenClientCallback = res;
-            this.gd.tokenClientError = rej;
-            this.gd.tokenClient.requestAccessToken();
+    async function requestAccessToken(gd: GoogleDriveData, extra?: any) {
+        return await new Promise((res, rej) => {
+            gd.tokenClientCallback = res;
+            gd.tokenClientError = rej;
+            gd.tokenClient.requestAccessToken(extra);
         });
     }
 
+    // Attempt to log in without transient activation
+    let loginInfo: any;
+    try {
+        loginInfo = await requestAccessToken(this.gd);
+    } catch (ex) {
+        // OK, try with transient activation
+        await options.nonlocalforage.transientActivation();
+        loginInfo = await requestAccessToken(this.gd);
+    }
+
     // Save login hint
+    const userInfo = await gapi.client.oauth2.userinfo.get();
     if (options.localforage) {
-        const userInfo = await gapi.client.oauth2.userinfo.get();
         await options.localforage.setItem("google-drive-login", userInfo.result.email);
     }
+
+    // Handle timeout
+    const timeoutRelogin = async () => {
+        try {
+            loginInfo = await requestAccessToken(this.gd, {
+                prompt: "none",
+                login_hint: userInfo.result.email
+            });
+        } catch (ex) {
+            await (
+                options.nonlocalforage.lateTransientActivation ||
+                options.nonlocalforage.transientActivation
+            )();
+            loginInfo = await requestAccessToken(this.gd, {
+                prompt: "none",
+                login_hint: userInfo.result.email
+            });
+        }
+    };
+    setTimeout(timeoutRelogin, (loginInfo.expires_in - 600) * 1000);
 
     // Create the store path
     const path = util.cloudDirectory(options);
