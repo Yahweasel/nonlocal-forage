@@ -67,12 +67,16 @@ async function _initStorage(
     this: LocalforageGoogleDrive,
     options: any
 ) {
+    // Load libraries
     if (typeof gapi === "undefined")
         await util.loadScript("https://apis.google.com/js/api.js");
     await new Promise(res => gapi.load("client", res));
     await gapi.client.init({
         apiKey: options.googleDrive.apiKey,
-        discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
+        discoveryDocs: [
+            "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+            "https://www.googleapis.com/discovery/v1/apis/oauth2/v1/rest"
+        ],
     });
 
     if (typeof google === "undefined" || !google.accounts)
@@ -80,12 +84,19 @@ async function _initStorage(
 
     this.gd = <any> {};
 
+    // Load saved account info
+    let login_hint: string | undefined;
+    if (options.localforage)
+        login_hint = await options.localforage.getItem("google-drive-login") || void 0;
+
     // Create the token client
     this.gd.tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: options.googleDrive.clientId,
-        scope: "https://www.googleapis.com/auth/drive.file",
+        scope: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email",
         prompt: (options.nonlocalforage && options.nonlocalforage.forcePrompt)
             ? "select_account" : "",
+        login_hint: (options.nonlocalforage && options.nonlocalforage.forcePrompt)
+            ? void 0 : login_hint,
         callback: () => this.gd.tokenClientCallback(),
         error_callback: (x: any) => this.gd.tokenClientError(x)
     });
@@ -105,6 +116,12 @@ async function _initStorage(
             this.gd.tokenClientError = rej;
             this.gd.tokenClient.requestAccessToken();
         });
+    }
+
+    // Save login hint
+    if (options.localforage) {
+        const userInfo = await gapi.client.oauth2.userinfo.get();
+        await options.localforage.setItem("google-drive-login", userInfo.result.email);
     }
 
     // Create the store path
