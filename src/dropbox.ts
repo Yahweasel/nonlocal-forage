@@ -22,12 +22,13 @@ import * as ser from "./serializer";
 import * as util from "./util";
 
 interface DropboxData {
+    promise: Promise<unknown>;
     dbx: dropboxT.Dropbox;
     dir: string;
 }
 
 type LocalforageDropbox = typeof localforageT & {
-    dbx: DropboxData;
+    _dbx: DropboxData;
 };
 
 async function _initStorage(
@@ -135,108 +136,133 @@ async function _initStorage(
         }
     }
 
-    this.dbx = {
+    this._dbx = {
+        promise: Promise.all([]),
         dbx, dir: curDir
     };
 }
 
-async function iterate(
+function iterate(
     this: LocalforageDropbox,
     iteratorCallback: (key: string) => any,
     successCallback: () => unknown
 ) {
-    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
-    const files = await dbx.filesListFolder({
-        path: this.dbx.dir
+    const p = this._dbx.promise.catch(console.error).then(async () => {
+        const dbx = <dropboxT.Dropbox> this._dbx.dbx;
+        const files = await dbx.filesListFolder({
+            path: this._dbx.dir
+        });
+        for (const file of files.result.entries)
+            iteratorCallback(ser.unsafeify(file.name));
+        if (successCallback)
+            successCallback();
     });
-    for (const file of files.result.entries)
-        iteratorCallback(ser.unsafeify(file.name));
-    if (successCallback)
-        successCallback();
+    this._dbx.promise = p;
+    return p;
 }
 
-async function getItem(
+function getItem(
     this: LocalforageDropbox,
     key: string, callback?: (value: any)=>unknown
 ) {
-    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
+    const p = this._dbx.promise.catch(console.error).then(async () => {
+        const dbx = <dropboxT.Dropbox> this._dbx.dbx;
 
-    // Try to download the file
-    let value: any = null;
-    try {
-        const dl = await dbx.filesDownload({
-            path: `${this.dbx.dir}/${ser.safeify(key)}`
-        });
-        const fileBlob = <Blob> (<any> dl).result.fileBlob;
-        const fileU8 = new Uint8Array(await fileBlob.arrayBuffer());
-        value = ser.deserialize(fileU8);
-    } catch (ex) {}
+        // Try to download the file
+        let value: any = null;
+        try {
+            const dl = await dbx.filesDownload({
+                path: `${this._dbx.dir}/${ser.safeify(key)}`
+            });
+            const fileBlob = <Blob> (<any> dl).result.fileBlob;
+            const fileU8 = new Uint8Array(await fileBlob.arrayBuffer());
+            value = ser.deserialize(fileU8);
+        } catch (ex) {}
 
-    if (callback)
-        callback(value);
+        if (callback)
+            callback(value);
 
-    return value;
+        return value;
+    });
+    this._dbx.promise = p;
+    return p;
 }
 
-async function setItem(
+function setItem(
     this: LocalforageDropbox,
     key: string, value: any, callback?: ()=>unknown
 ) {
-    // Serialize the value
-    const valSer = ser.serialize(value);
+    const p = this._dbx.promise.catch(console.error).then(async () => {
+        // Serialize the value
+        const valSer = ser.serialize(value);
 
-    // Create the file
-    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
-    await dbx.filesUpload({
-        path: `${this.dbx.dir}/${ser.safeify(key)}`,
-        contents: valSer,
-        mode: {
-            ".tag": "overwrite"
-        }
+        // Create the file
+        const dbx = <dropboxT.Dropbox> this._dbx.dbx;
+        await dbx.filesUpload({
+            path: `${this._dbx.dir}/${ser.safeify(key)}`,
+            contents: valSer,
+            mode: {
+                ".tag": "overwrite"
+            }
+        });
+
+        if (callback)
+            callback();
     });
-
-    if (callback)
-        callback();
+    this._dbx.promise = p;
+    return p;
 }
 
-async function removeItem(
+function removeItem(
     this: LocalforageDropbox,
     key: string, callback?: ()=>unknown
 ) {
-    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
-    await dbx.filesDeleteV2({
-        path: `${this.dbx.dir}/${ser.safeify(key)}`
+    const p = this._dbx.promise.catch(console.error).then(async () => {
+        const dbx = <dropboxT.Dropbox> this._dbx.dbx;
+        await dbx.filesDeleteV2({
+            path: `${this._dbx.dir}/${ser.safeify(key)}`
+        });
+        if (callback)
+            callback();
     });
-    if (callback)
-        callback();
+    this._dbx.promise = p;
+    return p;
 }
 
-async function clear(
+function clear(
     this: LocalforageDropbox,
     callback?: ()=>unknown
 ) {
-    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
-    await dbx.filesDeleteV2({
-        path: this.dbx.dir
+    const p = this._dbx.promise.catch(console.error).then(async () => {
+        const dbx = <dropboxT.Dropbox> this._dbx.dbx;
+        await dbx.filesDeleteV2({
+            path: this._dbx.dir
+        });
+        await dbx.filesCreateFolderV2({
+            path: this._dbx.dir
+        });
+        if (callback)
+            callback();
     });
-    await dbx.filesCreateFolderV2({
-        path: this.dbx.dir
-    });
-    if (callback)
-        callback();
+    this._dbx.promise = p;
+    return p;
 }
 
-async function length(
+function length(
     this: LocalforageDropbox,
     callback?: (len: number)=>unknown
 ) {
-    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
-    const files = await dbx.filesListFolder({
-        path: this.dbx.dir
+    const p = this._dbx.promise.catch(console.error).then(async () => {
+        const dbx = <dropboxT.Dropbox> this._dbx.dbx;
+        const files = await dbx.filesListFolder({
+            path: this._dbx.dir
+        });
+        if (callback)
+            callback(files.result.entries.length);
+        return files.result.entries.length;
     });
-    if (callback)
-        callback(files.result.entries.length);
-    return files.result.entries.length;
+    this._dbx.promise = p;
+    return p;
 }
 
 async function key(
@@ -252,21 +278,25 @@ async function key(
     throw new Error("Key does not exist");
 }
 
-async function keys(
+function keys(
     this: LocalforageDropbox,
     callback?: (keys: string[])=>unknown
 ) {
-    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
-    const files = await dbx.filesListFolder({
-        path: this.dbx.dir
+    const p = this._dbx.promise.catch(console.error).then(async () => {
+        const dbx = <dropboxT.Dropbox> this._dbx.dbx;
+        const files = await dbx.filesListFolder({
+            path: this._dbx.dir
+        });
+        const keys = files.result.entries.map(x => ser.unsafeify(x.name));
+        if (callback)
+            callback(keys);
+        return keys;
     });
-    const keys = files.result.entries.map(x => ser.unsafeify(x.name));
-    if (callback)
-        callback(keys);
-    return keys;
+    this._dbx.promise = p;
+    return p;
 }
 
-async function dropInstance(
+function dropInstance(
     this: LocalforageDropbox,
     options?: {name?: string, storeName?: string},
     callback?: () => unknown
@@ -277,16 +307,20 @@ async function dropInstance(
         options = void 0;
     }
 
-    // Figure out which directory to delete
-    const toDelete = util.dropInstanceDirectory(this.dbx.dir, options);
+    const p = this._dbx.promise.catch(console.error).then(async () => {
+        // Figure out which directory to delete
+        const toDelete = util.dropInstanceDirectory(this._dbx.dir, options);
 
-    const dbx = <dropboxT.Dropbox> this.dbx.dbx;
-    await dbx.filesDeleteV2({
-        path: toDelete
+        const dbx = <dropboxT.Dropbox> this._dbx.dbx;
+        await dbx.filesDeleteV2({
+            path: toDelete
+        });
+
+        if (callback)
+            callback();
     });
-
-    if (callback)
-        callback();
+    this._dbx.promise = p;
+    return p;
 }
 
 export const dropboxLocalForage = {

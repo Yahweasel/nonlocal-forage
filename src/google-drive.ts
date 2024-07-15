@@ -24,6 +24,7 @@ declare let gapi: any, google: any;
 const dirMime = "application/vnd.google-apps.folder";
 
 interface GoogleDriveData {
+    promise: Promise<unknown>;
     tokenClient: any;
     tokenClientCallback: (x: any) => void;
     tokenClientError: (x: any) => void;
@@ -33,7 +34,7 @@ interface GoogleDriveData {
 }
 
 type LocalforageGoogleDrive = typeof localforageT & {
-    gd: GoogleDriveData
+    _gd: GoogleDriveData
 };
 
 async function fileList(dir = "root", name = "") {
@@ -82,7 +83,7 @@ async function _initStorage(
     if (typeof google === "undefined" || !google.accounts)
         await util.loadScript("https://accounts.google.com/gsi/client");
 
-    this.gd = <any> {};
+    this._gd = <any> {};
 
     // Load saved account info
     let login_hint: string | undefined;
@@ -90,15 +91,15 @@ async function _initStorage(
         login_hint = await options.localforage.getItem("google-drive-login") || void 0;
 
     // Create the token client
-    this.gd.tokenClient = google.accounts.oauth2.initTokenClient({
+    this._gd.tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: options.googleDrive.clientId,
         scope: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email",
         prompt: (options.nonlocalforage && options.nonlocalforage.forcePrompt)
             ? "select_account" : "",
         login_hint: (options.nonlocalforage && options.nonlocalforage.forcePrompt)
             ? void 0 : login_hint,
-        callback: (x: any) => this.gd.tokenClientCallback(x),
-        error_callback: (x: any) => this.gd.tokenClientError(x)
+        callback: (x: any) => this._gd.tokenClientCallback(x),
+        error_callback: (x: any) => this._gd.tokenClientError(x)
     });
 
     async function requestAccessToken(gd: GoogleDriveData, extra?: any) {
@@ -112,11 +113,11 @@ async function _initStorage(
     // Attempt to log in without transient activation
     let loginInfo: any;
     try {
-        loginInfo = await requestAccessToken(this.gd);
+        loginInfo = await requestAccessToken(this._gd);
     } catch (ex) {
         // OK, try with transient activation
         await options.nonlocalforage.transientActivation();
-        loginInfo = await requestAccessToken(this.gd);
+        loginInfo = await requestAccessToken(this._gd);
     }
 
     // Save login hint
@@ -125,23 +126,29 @@ async function _initStorage(
         await options.localforage.setItem("google-drive-login", userInfo.result.email);
     }
 
+    // Prepare serialization promise
+    this._gd.promise = Promise.all([]);
+
     // Handle timeout
     const timeoutRelogin = async () => {
-        try {
-            loginInfo = await requestAccessToken(this.gd, {
-                prompt: "none",
-                login_hint: userInfo.result.email
-            });
-        } catch (ex) {
-            await (
-                options.nonlocalforage.lateTransientActivation ||
-                options.nonlocalforage.transientActivation
-            )();
-            loginInfo = await requestAccessToken(this.gd, {
-                prompt: "none",
-                login_hint: userInfo.result.email
-            });
-        }
+        this._gd.promise = this._gd.promise.catch(console.error).then(async () => {
+            try {
+                loginInfo = await requestAccessToken(this._gd, {
+                    prompt: "none",
+                    login_hint: userInfo.result.email
+                });
+            } catch (ex) {
+                await (
+                    options.nonlocalforage.lateTransientActivation ||
+                        options.nonlocalforage.transientActivation
+                )();
+                loginInfo = await requestAccessToken(this._gd, {
+                    prompt: "none",
+                    login_hint: userInfo.result.email
+                });
+            }
+            setTimeout(timeoutRelogin, (loginInfo.expires_in - 600) * 1000);
+        });
     };
     setTimeout(timeoutRelogin, (loginInfo.expires_in - 600) * 1000);
 
@@ -165,44 +172,52 @@ async function _initStorage(
 
         curDir = nextDir!;
     }
-    this.gd.name = options.name || "default";
-    this.gd.path = path;
-    this.gd.dirId = curDir;
+    this._gd.name = options.name || "default";
+    this._gd.path = path;
+    this._gd.dirId = curDir;
 }
 
-async function iterate(
+function iterate(
     this: LocalforageGoogleDrive,
     iteratorCallback: (key: string) => any,
     successCallback?: () => unknown
 ) {
-    const files = await fileList(this.gd.dirId);
-    for (const file of files) {
-        const value = await getItemById(file.id);
-        const res = iteratorCallback(ser.unsafeify(file.name));
-        if (res !== void 0)
-            break;
-    }
+    const p = this._gd.promise.catch(console.error).then(async () => {
+        const files = await fileList(this._gd.dirId);
+        for (const file of files) {
+            const value = await getItemById(file.id);
+            const res = iteratorCallback(ser.unsafeify(file.name));
+            if (res !== void 0)
+                break;
+        }
 
-    if (successCallback)
-        successCallback();
+        if (successCallback)
+            successCallback();
+    });
+    this._gd.promise = p;
+    return p;
 }
 
-async function getItem(
+function getItem(
     this: LocalforageGoogleDrive,
     key: string, callback?: (value: any)=>unknown
 ) {
-    // Look for a connected file
-    const files = await fileList(this.gd.dirId, ser.safeify(key));
-    if (!files.length) {
-        if (callback)
-            callback(null);
-        return null;
-    }
+    const p = this._gd.promise.catch(console.error).then(async () => {
+        // Look for a connected file
+        const files = await fileList(this._gd.dirId, ser.safeify(key));
+        if (!files.length) {
+            if (callback)
+                callback(null);
+            return null;
+        }
 
-    const value = await getItemById(files[0].id);
-    if (callback)
-        callback(value);
-    return value;
+        const value = await getItemById(files[0].id);
+        if (callback)
+            callback(value);
+        return value;
+    });
+    this._gd.promise = p;
+    return p;
 }
 
 async function getItemById(id: string) {
@@ -221,58 +236,66 @@ async function getItemById(id: string) {
     return await ser.deserialize(body);
 }
 
-async function setItem(
+function setItem(
     this: LocalforageGoogleDrive,
     key: string, value: any, callback?: ()=>unknown
 ) {
-    // Serialize
-    const keySer = ser.safeify(key);
-    const valSer = ser.serialize(value);
+    const p = this._gd.promise.catch(console.error).then(async () => {
+        // Serialize
+        const keySer = ser.safeify(key);
+        const valSer = ser.serialize(value);
 
-    // Create the file
-    const accessToken = gapi.client.getToken().access_token;
-    const form = new FormData();
-    form.append("metadata", new Blob([JSON.stringify({
-        parents: [this.gd.dirId],
-        name: keySer
-    })], { type: "application/json" }));
-    form.append("file", new Blob([valSer]));
-    const fres = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
-        method: "POST",
-        headers: { "authorization": `Bearer ${accessToken}` },
-        body: form
-    });
-    if (fres.status < 200 || fres.status >= 300)
-        throw new Error(await fres.text());
-    const file = await fres.json();
-
-    // Look for any other instances
-    const files = await fileList(this.gd.dirId, keySer);
-    for (const otherFile of files) {
-        if (otherFile.id === file.id)
-            continue;
-        await gapi.client.drive.files.delete({
-            fileId: otherFile.id
+        // Create the file
+        const accessToken = gapi.client.getToken().access_token;
+        const form = new FormData();
+        form.append("metadata", new Blob([JSON.stringify({
+            parents: [this._gd.dirId],
+            name: keySer
+        })], { type: "application/json" }));
+        form.append("file", new Blob([valSer]));
+        const fres = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
+            method: "POST",
+            headers: { "authorization": `Bearer ${accessToken}` },
+            body: form
         });
-    }
+        if (fres.status < 200 || fres.status >= 300)
+            throw new Error(await fres.text());
+        const file = await fres.json();
 
-    if (callback)
-        callback();
+        // Look for any other instances
+        const files = await fileList(this._gd.dirId, keySer);
+        for (const otherFile of files) {
+            if (otherFile.id === file.id)
+                continue;
+            await gapi.client.drive.files.delete({
+                fileId: otherFile.id
+            });
+        }
+
+        if (callback)
+            callback();
+    });
+    this._gd.promise = p;
+    return p;
 }
 
-async function removeItem(
+function removeItem(
     this: LocalforageGoogleDrive,
     key: string, callback?: ()=>unknown
 ) {
-    const files = await fileList(this.gd.dirId, ser.safeify(key));
-    for (const file of files) {
-        await gapi.client.drive.files.delete({
-            fileId: file.id
-        });
-    }
+    const p = this._gd.promise.catch(console.error).then(async () => {
+        const files = await fileList(this._gd.dirId, ser.safeify(key));
+        for (const file of files) {
+            await gapi.client.drive.files.delete({
+                fileId: file.id
+            });
+        }
 
-    if (callback)
-        callback();
+        if (callback)
+            callback();
+    });
+    this._gd.promise = p;
+    return p;
 }
 
 async function clear(
@@ -282,14 +305,18 @@ async function clear(
     await removeItem.call(this, "", callback);
 }
 
-async function length(
+function length(
     this: LocalforageGoogleDrive,
     callback?: (len: number)=>unknown
 ) {
-    const len = (await fileList(this.gd.dirId)).length;
-    if (callback)
-        callback(len);
-    return len;
+    const p = this._gd.promise.catch(console.error).then(async () => {
+        const len = (await fileList(this._gd.dirId)).length;
+        if (callback)
+            callback(len);
+        return len;
+    });
+    this._gd.promise = p;
+    return p;
 }
 
 async function key(
@@ -305,18 +332,22 @@ async function key(
     throw new Error("Key does not exist");
 }
 
-async function keys(
+function keys(
     this: LocalforageGoogleDrive,
     callback?: (keys: string[])=>unknown
 ) {
-    const files = await fileList(this.gd.dirId);
-    const keys = files.map(x => ser.unsafeify(x.name));
-    if (callback)
-        callback(keys);
-    return keys;
+    const p = this._gd.promise.catch(console.error).then(async () => {
+        const files = await fileList(this._gd.dirId);
+        const keys = files.map(x => ser.unsafeify(x.name));
+        if (callback)
+            callback(keys);
+        return keys;
+    });
+    this._gd.promise = p;
+    return p;
 }
 
-async function dropInstance(
+function dropInstance(
     this: LocalforageGoogleDrive,
     options?: {name?: string, storeName?: string},
     callback?: () => unknown
@@ -327,32 +358,36 @@ async function dropInstance(
         options = void 0;
     }
 
-    // Figure out which directory to delete
-    let toDelete: string = this.gd.dirId;
-    const toDeleteDir = util.dropInstanceDirectory(this.gd.path, options);
-    if (toDeleteDir !== this.gd.path) {
-        const parts = toDeleteDir.split("/");
-        let curDir = "root";
-        for (const part of parts) {
-            const files = await fileList(curDir, part);
-            if (!files.length) {
-                // Doesn't exist, don't delete it!
-                if (callback)
-                    callback();
-                return;
+    const p = this._gd.promise.catch(console.error).then(async () => {
+        // Figure out which directory to delete
+        let toDelete: string = this._gd.dirId;
+        const toDeleteDir = util.dropInstanceDirectory(this._gd.path, options);
+        if (toDeleteDir !== this._gd.path) {
+            const parts = toDeleteDir.split("/");
+            let curDir = "root";
+            for (const part of parts) {
+                const files = await fileList(curDir, part);
+                if (!files.length) {
+                    // Doesn't exist, don't delete it!
+                    if (callback)
+                        callback();
+                    return;
+                }
+                curDir = files[0].id;
             }
-            curDir = files[0].id;
+            toDelete = curDir;
         }
-        toDelete = curDir;
-    }
 
-    // Delete as requested
-    await gapi.client.drive.files.delete({
-        fileId: toDelete
+        // Delete as requested
+        await gapi.client.drive.files.delete({
+            fileId: toDelete
+        });
+
+        if (callback)
+            callback();
     });
-
-    if (callback)
-        callback();
+    this._gd.promise = p;
+    return p;
 }
 
 export const googleDriveLocalForage = {
