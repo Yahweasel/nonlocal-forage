@@ -55,23 +55,26 @@ async function _initStorage(
         let accessTokenInfo: any = null;
 
         // Try using the saved code
-        if (options.localforage) {
+        if (options.localforage &&
+            (!options.nonlocalforage || !options.nonlocalforage.forcePrompt)) {
             try {
                 const savedAT = await options.localforage.getItem("dropbox-access-token");
                 const savedRT = await options.localforage.getItem("dropbox-refresh-token");
-                auth.setAccessToken(savedAT);
-                auth.setRefreshToken(savedRT);
+                if (savedAT && savedRT) {
+                    auth.setAccessToken(savedAT);
+                    auth.setRefreshToken(savedRT);
 
-                // Check if it works
-                await dbx.filesListFolder({path: ""});
+                    // Check if it works
+                    await dbx.filesListFolder({path: ""});
 
-                accessTokenInfo = {
-                    result: {
-                        access_token: savedAT,
-                        refresh_token: savedRT,
-                        expires_in: 0
-                    }
-                };
+                    accessTokenInfo = {
+                        result: {
+                            access_token: savedAT,
+                            refresh_token: savedRT,
+                            expires_in: 0
+                        }
+                    };
+                }
             } catch (ex) {}
         }
 
@@ -80,7 +83,9 @@ async function _initStorage(
             await options.nonlocalforage.transientActivation();
 
             // Open an authentication iframe
-            const authWin = window.open(url.toString(), "", "popup")!;
+            const authWin = window.open(
+                url.toString(), "", "popup,width=480,height=640"
+            )!;
             await new Promise((res, rej) => {
                 authWin.onload = res;
                 authWin.onerror = rej;
