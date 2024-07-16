@@ -6,16 +6,15 @@
     </head>
     <body>
         <script type="text/javascript">(function() {
-            const url = new URL(document.location.href);
-            let accessToken = null;
+            var url = new URL(document.location.href);
+            var code = null;
             try {
-                const hashParams = new URLSearchParams(url.hash.slice(1));
-                accessToken = hashParams.get("access_token");
+                code = url.searchParams.get("code");
             } catch (ex) {}
-            if (accessToken) {
+            if (code) {
                 window.opener.postMessage({
                     dropbox: true,
-                    accessToken: accessToken
+                    code: code
                 });
             } else {
                 window.addEventListener("message", function(ev) {
