@@ -35,111 +35,133 @@ async function _initStorage(
     this: LocalforageDropbox,
     options: any
 ) {
-    // Load the library
-    if (typeof Dropbox === "undefined")
-        await util.loadScript("https://cdn.jsdelivr.net/npm/dropbox@10.34.0");
-
-    // Check for an access token in the URL
-    const url = new URL(document.location.href);
-    let dbx: dropboxT.Dropbox | null = null;
-    let hashParams: URLSearchParams | null = null;
     try {
-        hashParams = new URLSearchParams(url.hash.slice(1));
-    } catch (ex) {}
+        // Load the library
+        if (typeof Dropbox === "undefined")
+            await util.loadScript("https://cdn.jsdelivr.net/npm/dropbox@10.34.0");
 
-    let savedToken: string | null = null;
-    if (options.localforage)
-        savedToken = await options.localforage.getItem("dropbox-token");
+        const url = new URL(document.location.href);
+        const dbx = new Dropbox.Dropbox({clientId: options.dropbox.clientId});
+        const auth: dropboxT.DropboxAuth = (<any> dbx).auth;
 
-    if (savedToken && (!options.nonlocalforage || !options.nonlocalforage.forcePrompt)) {
-        // Try to use the existing token
-        dbx = new Dropbox.Dropbox({
-            accessToken: savedToken,
-        });
-
-        // Check if the token works
-        try {
-            const auth: dropboxT.DropboxAuth = (<any> dbx).auth;
-            await auth.checkAndRefreshAccessToken();
-            await dbx.filesListFolder({
-                path: ""
-            });
-        } catch (ex) {
-            dbx = null;
-        }
-    }
-
-    if (!dbx) {
-        dbx = new Dropbox.Dropbox({clientId: options.dropboxT.clientId});
-
-        // Need to authenticate
+        // Get the authentication URL
         url.pathname = url.pathname.replace(/\/[^\/]*$/, "/dropbox-login.html");
         url.search = "";
         url.hash = "";
-        let auth: dropboxT.DropboxAuth = (<any> dbx).auth;
-        const aurl = await auth.getAuthenticationUrl(url.toString());
+        const aurl = await auth.getAuthenticationUrl(
+            url.toString(), "", "code", "offline", void 0, "none", true
+        );
 
-        await options.nonlocalforage.transientActivation();
+        let accessTokenInfo: any = null;
 
-        // Open an authentication iframe
-        const authWin = window.open(url.toString(), "", "popup")!;
-        await new Promise((res, rej) => {
-            authWin.onload = res;
-            authWin.onerror = rej;
-            authWin.onclose = rej;
-        });
-        authWin.postMessage({
-            dropbox: true,
-            authUrl: aurl
-        });
+        // Try using the saved code
+        if (options.localforage) {
+            try {
+                const savedAT = await options.localforage.getItem("dropbox-access-token");
+                const savedRT = await options.localforage.getItem("dropbox-refresh-token");
+                auth.setAccessToken(savedAT);
+                auth.setRefreshToken(savedRT);
 
-        // Wait for the access token
-        const accessToken: string = await new Promise((res, rej) => {
-            function onmessage(ev: MessageEvent) {
-                if (ev.data && ev.data.dropbox && ev.data.accessToken) {
-                    removeEventListener("message", onmessage);
-                    res(ev.data.accessToken);
+                // Check if it works
+                await dbx.filesListFolder({path: ""});
+
+                accessTokenInfo = {
+                    result: {
+                        access_token: savedAT,
+                        refresh_token: savedRT,
+                        expires_in: 0
+                    }
+                };
+            } catch (ex) {}
+        }
+
+        // If we didn't authenticate, get a new code
+        if (!accessTokenInfo) {
+            await options.nonlocalforage.transientActivation();
+
+            // Open an authentication iframe
+            const authWin = window.open(url.toString(), "", "popup")!;
+            await new Promise((res, rej) => {
+                authWin.onload = res;
+                authWin.onerror = rej;
+                authWin.onclose = rej;
+            });
+            authWin.postMessage({
+                dropbox: true,
+                authUrl: aurl
+            });
+
+            // Wait for the access token
+            const code: string = await new Promise((res, rej) => {
+                function onmessage(ev: MessageEvent) {
+                    if (ev.data && ev.data.dropbox && ev.data.code) {
+                        removeEventListener("message", onmessage);
+                        res(ev.data.code);
+                    }
+                }
+
+                addEventListener("message", onmessage);
+                authWin.onclose = rej;
+            });
+
+            authWin.onclose = null;
+            authWin.close();
+
+            accessTokenInfo = await auth.getAccessTokenFromCode(
+                url.toString(), code
+            );
+            auth.setAccessToken(accessTokenInfo.result.access_token);
+            auth.setRefreshToken(accessTokenInfo.result.refresh_token);
+
+            if (options.localforage) {
+                await options.localforage.setItem("dropbox-access-token", accessTokenInfo.result.access_token);
+                await options.localforage.setItem("dropbox-refresh-token", accessTokenInfo.result.refresh_token);
+            }
+        }
+
+        // Create the store path
+        const path = util.cloudDirectory(options);
+        let curDir = "";
+        for (const part of path.split("/")) {
+            const files = await dbx.filesListFolder({path: curDir});
+            // Check if it already exists
+            let exists = false;
+            for (const file of files.result.entries) {
+                if (file[".tag"] === "folder" && file.name === part) {
+                    exists = true;
+                    break;
                 }
             }
-
-            addEventListener("message", onmessage);
-            authWin.onclose = rej;
-        });
-
-        authWin.onclose = null;
-        authWin.close();
-
-        dbx = new Dropbox.Dropbox({accessToken});
-        auth = (<any> dbx).auth;
-        if (options.localforage)
-            await options.localforage.setItem("dropbox-token", accessToken);
-    }
-
-    // Create the store path
-    const path = util.cloudDirectory(options);
-    let curDir = "";
-    for (const part of path.split("/")) {
-        const files = await dbx.filesListFolder({path: curDir});
-        // Check if it already exists
-        let exists = false;
-        for (const file of files.result.entries) {
-            if (file[".tag"] === "folder" && file.name === part) {
-                exists = true;
-                break;
+            curDir = `${curDir}/${part}`;
+            if (!exists) {
+                await dbx.filesCreateFolderV2({
+                    path: curDir
+                });
             }
         }
-        curDir = `${curDir}/${part}`;
-        if (!exists) {
-            await dbx.filesCreateFolderV2({
-                path: curDir
-            });
-        }
-    }
 
-    this._dbx = {
-        promise: Promise.all([]),
-        dbx, dir: curDir
-    };
+        this._dbx = {
+            promise: Promise.all([]),
+            dbx, dir: curDir
+        };
+
+        // And prepare for token refresh
+        const refreshToken = () => {
+            this._dbx.promise = this._dbx.promise.catch(console.error).then(async () => {
+                await auth.refreshAccessToken();
+                setTimeout(
+                    refreshToken,
+                    auth.getAccessTokenExpiresAt().getTime() - new Date().getTime() - 600000
+                );
+            });
+        };
+        setTimeout(refreshToken, (accessTokenInfo.expires_in - 600) * 1000);
+
+    } catch (ex: any) {
+        console.error(`${ex}\n${ex.stack}`);
+        throw ex;
+
+    }
 }
 
 function iterate(
