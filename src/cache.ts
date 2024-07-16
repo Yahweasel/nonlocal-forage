@@ -101,9 +101,12 @@ async function setItem(
     });
     cf.localPromise = localPromise.catch(x => cf.error = x);
     await localPromise;
+    value = null;
 
     cf.nonlocalPromise = cf.nonlocalPromise.then(async () => {
-        await cf.nonlocal.setItem(key, value);
+        const value = await cf.local.getItem(key);
+        if (value !== null)
+            await cf.nonlocal.setItem(key, value);
         await cf.local.removeItem(key);
     }).catch(x => cf.error = x);
 
