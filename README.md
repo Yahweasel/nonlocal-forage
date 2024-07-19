@@ -117,6 +117,17 @@ Define it like so:
 await localforage.defineDriver(NonlocalForage.googleDriveLocalForage);
 ```
 
+Due to a lot of weirdness in how Google implements OAuth2, there are two
+options for handling login. Either login can be client-only, but the user will
+need to refresh it every hour (using `lateTransientActivation`), or a server
+component can be included to make login more transparent. The server component,
+called a “code server” as it handles authentication-code based login, is fairly
+simple; an example is given in
+[server/google-code-server.jss](server/google-code-server.jss).
+
+Login is performed through `oauth2-login.html`, which must be present next to
+your web app. It is opened in a popup window for initial login.
+
 To create an instance, use the driver name `"googleDrive"`, and include a
 `googleDrive` field in the options as an object with the `apiKey` and
 `clientId` fields set, like so:
@@ -132,6 +143,22 @@ const gdlf = await localforage.createInstance({
     googleDrive: {
         apiKey: "Google Drive API key",
         clientId: "Google Drive API client ID"
+    }
+});
+await gdlf.ready();
+```
+
+If using a code server, additionally set the `codeServer` field to the URL
+(which may be relative) to the code server:
+
+```js
+const gdlf = await localforage.createInstance({
+    driver: "googleDrive",
+    ...
+    googleDrive: {
+        apiKey: "Google Drive API key",
+        clientId: "Google Drive API client ID",
+        codeServer: "/api/google-code-server.jss"
     }
 });
 await gdlf.ready();
