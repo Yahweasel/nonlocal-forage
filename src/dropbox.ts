@@ -45,11 +45,13 @@ async function _initStorage(
         const auth: dropboxT.DropboxAuth = (<any> dbx).auth;
 
         // Get the authentication URL
-        url.pathname = url.pathname.replace(/\/[^\/]*$/, "/dropbox-login.html");
+        url.pathname = url.pathname.replace(/\/[^\/]*$/, "/oauth2-login.html");
         url.search = "";
         url.hash = "";
+        const state = Math.random().toString(36) + Math.random().toString(36) +
+            Math.random().toString(36);
         const aurl = await auth.getAuthenticationUrl(
-            url.toString(), "", "code", "offline", void 0, "none", true
+            url.toString(), state, "code", "offline", void 0, "none", true
         );
 
         let accessTokenInfo: any = null;
@@ -99,7 +101,7 @@ async function _initStorage(
             // Wait for the access token
             const code: string = await new Promise((res, rej) => {
                 function onmessage(ev: MessageEvent) {
-                    if (ev.data && ev.data.dropbox && ev.data.code) {
+                    if (ev.data && ev.data.oauth2 && ev.data.state === state) {
                         removeEventListener("message", onmessage);
                         res(ev.data.code);
                     }

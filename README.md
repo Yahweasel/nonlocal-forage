@@ -126,7 +126,8 @@ simple; an example is given in
 [server/google-code-server.jss](server/google-code-server.jss).
 
 Login is performed through `oauth2-login.html`, which must be present next to
-your web app. It is opened in a popup window for initial login.
+your web app. It is opened in a popup window for initial login. It also must be
+a valid redirect URI for your Google API project.
 
 To create an instance, use the driver name `"googleDrive"`, and include a
 `googleDrive` field in the options as an object with the `apiKey` and
@@ -194,9 +195,9 @@ const dbxlf = await localforage.createInstance({
 await dbxlf.ready();
 ```
 
-In order to be able to log into Dropbox, you *must* put `dropbox-login.html`
-next to your web app. It is opened in a window to begin the Dropbox login
-process.
+In order to be able to log into Dropbox, you must put `oauth2-login.html` next
+to your web app. It is opened in a window to begin the Dropbox login process.
+It also must be a valid redirect URI for your Dropbox API project.
 
 Files are stored in
 `Apps/<application name>/<nonlocalforage.directory>/<options.name>/<options.storeName>/<key>`.
