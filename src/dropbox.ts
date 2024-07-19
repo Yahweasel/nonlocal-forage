@@ -165,8 +165,7 @@ async function _initStorage(
                 );
             });
         };
-        //setTimeout(refresh, tokenInfo.expiresAt! - new Date().getTime() - 600000);
-        setTimeout(refresh, 2000);
+        setTimeout(refresh, tokenInfo.expiresAt! - new Date().getTime() - 600000);
 
     } catch (ex: any) {
         console.error(`${ex}\n${ex.stack}`);

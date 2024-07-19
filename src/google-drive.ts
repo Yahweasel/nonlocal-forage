@@ -229,8 +229,7 @@ async function _initStorage(
             setTimeout(timeoutRelogin, expiresAt! - new Date().getTime() - 600000);
         });
     };
-    //setTimeout(timeoutRelogin, expiresAt! - new Date().getTime() - 600000);
-    setTimeout(timeoutRelogin, 2000);
+    setTimeout(timeoutRelogin, expiresAt! - new Date().getTime() - 600000);
 
     // Create the store path
     const path = util.cloudDirectory(options);
