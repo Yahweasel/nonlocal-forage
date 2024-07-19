@@ -14,6 +14,7 @@
  */
 
 import type * as localforageT from "localforage";
+import * as bgoauth2 from "@badgateway/oauth2-client";
 
 import type * as dropboxT from "dropbox";
 declare let Dropbox: typeof dropboxT;
@@ -48,13 +49,31 @@ async function _initStorage(
         const auth: dropboxT.DropboxAuth = (<any> dbx).auth;
 
         // Get the authentication URL
+        const oauth2Client = new bgoauth2.OAuth2Client({
+            clientId: options.dropbox.clientId,
+            server: "https://www.dropbox.com/",
+            discoveryEndpoint: "/.well-known/openid-configuration"
+        });
+        const codeVerifier = await bgoauth2.generateCodeVerifier();
         const state = Math.random().toString(36) + Math.random().toString(36) +
             Math.random().toString(36);
-        const aurl = await auth.getAuthenticationUrl(
-            oauth2.redirectUrl.toString(), state, "code", "offline", void 0, "none", true
-        );
+        const authUrl = await oauth2Client.authorizationCode.getAuthorizeUri({
+            redirectUri: oauth2.redirectUrl.toString(),
+            state,
+            codeVerifier,
+            scope: [
+                "account_info.read",
+                "files.metadata.read",
+                "files.metadata.write",
+                "files.content.read",
+                "files.content.write"
+            ],
+            extraParams: {
+                token_access_type: "offline"
+            }
+        });
 
-        let accessTokenInfo: any = null;
+        let tokenInfo: bgoauth2.OAuth2Token | null = null;
 
         // Try using the saved code
         if (options.localforage && !nlfOpts.forcePrompt) {
@@ -62,39 +81,44 @@ async function _initStorage(
                 const savedAT = await options.localforage.getItem("dropbox-access-token");
                 const savedRT = await options.localforage.getItem("dropbox-refresh-token");
                 if (savedAT && savedRT) {
-                    auth.setAccessToken(savedAT);
-                    auth.setRefreshToken(savedRT);
+                    tokenInfo = await oauth2Client.refreshToken({
+                        accessToken: savedAT,
+                        refreshToken: savedRT,
+                        expiresAt: new Date().getTime()
+                    });
+                    auth.setAccessToken(tokenInfo.accessToken);
+                    auth.setRefreshToken(tokenInfo.refreshToken!);
 
                     // Check if it works
                     await dbx.filesListFolder({path: ""});
 
-                    accessTokenInfo = {
-                        result: {
-                            access_token: savedAT,
-                            refresh_token: savedRT,
-                            expires_in: 0
-                        }
-                    };
+                    await options.localforage.setItem("dropbox-access-token", tokenInfo.accessToken);
+                    await options.localforage.setItem("dropbox-refresh-token", tokenInfo.refreshToken!);
                 }
-            } catch (ex) {}
+            } catch (ex) {
+                tokenInfo = null;
+            }
         }
 
         // If we didn't authenticate, get a new code
-        if (!accessTokenInfo) {
+        if (!tokenInfo) {
             await nlfOpts.transientActivation();
 
             // Wait for the access token
-            const codeInfo = await oauth2.authWin(nlfOpts, aurl.toString(), state);
+            const codeInfo = await oauth2.authWin(nlfOpts, authUrl, state);
 
-            accessTokenInfo = await auth.getAccessTokenFromCode(
-                oauth2.redirectUrl.toString(), codeInfo.code
-            );
-            auth.setAccessToken(accessTokenInfo.result.access_token);
-            auth.setRefreshToken(accessTokenInfo.result.refresh_token);
+            tokenInfo = await oauth2Client.authorizationCode.getToken({
+                redirectUri: oauth2.redirectUrl.toString(),
+                state,
+                code: codeInfo.code,
+                codeVerifier
+            });
+            auth.setAccessToken(tokenInfo.accessToken);
+            auth.setRefreshToken(tokenInfo.refreshToken!);
 
             if (options.localforage) {
-                await options.localforage.setItem("dropbox-access-token", accessTokenInfo.result.access_token);
-                await options.localforage.setItem("dropbox-refresh-token", accessTokenInfo.result.refresh_token);
+                await options.localforage.setItem("dropbox-access-token", tokenInfo.accessToken);
+                await options.localforage.setItem("dropbox-refresh-token", tokenInfo.refreshToken!);
             }
         }
 
@@ -125,16 +149,24 @@ async function _initStorage(
         };
 
         // And prepare for token refresh
-        const refreshToken = () => {
+        const refresh = () => {
             this._dbx.promise = this._dbx.promise.catch(console.error).then(async () => {
-                await auth.refreshAccessToken();
+                const refreshToken = tokenInfo!.refreshToken;
+                tokenInfo = await oauth2Client.refreshToken(tokenInfo!);
+                tokenInfo.refreshToken = tokenInfo.refreshToken || refreshToken;
+                if (options.localforage) {
+                    options.localforage.setItem("dropbox-access-token", tokenInfo.accessToken);
+                    options.localforage.setItem("dropbox-refresh-token", tokenInfo.refreshToken!);
+                }
+                console.log(tokenInfo);
                 setTimeout(
-                    refreshToken,
-                    auth.getAccessTokenExpiresAt().getTime() - new Date().getTime() - 600000
+                    refresh,
+                    tokenInfo.expiresAt! - new Date().getTime() - 600000
                 );
             });
         };
-        setTimeout(refreshToken, (accessTokenInfo.expires_in - 600) * 1000);
+        //setTimeout(refresh, tokenInfo.expiresAt! - new Date().getTime() - 600000);
+        setTimeout(refresh, 2000);
 
     } catch (ex: any) {
         console.error(`${ex}\n${ex.stack}`);
