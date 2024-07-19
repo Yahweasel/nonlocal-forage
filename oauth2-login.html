@@ -21,14 +21,16 @@
                 } catch (ex) {}
             }
             if (code || accessToken) {
-                (window.opener||window.parent).postMessage({
+                const authMsg = {
                     oauth2: true,
                     url: document.location.href,
                     code: code,
                     accessToken: accessToken,
                     expiresIn: expiresIn,
                     state: state
-                });
+                };
+                localStorage.setItem("oauth2-nonlocal-forage-" + state, JSON.stringify(authMsg));
+                window.close();
             } else {
                 window.addEventListener("message", function(ev) {
                     if (ev.data && ev.data.oauth2 && ev.data.authUrl)

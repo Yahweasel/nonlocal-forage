@@ -18,6 +18,8 @@ import type * as localforageT from "localforage";
 import type * as dropboxT from "dropbox";
 declare let Dropbox: typeof dropboxT;
 
+import * as oauth2 from "./oauth2";
+import * as nlfOptions from "./nlf-options";
 import * as ser from "./serializer";
 import * as util from "./util";
 
@@ -36,29 +38,26 @@ async function _initStorage(
     options: any
 ) {
     try {
+        const nlfOpts: nlfOptions.NonlocalforageOptions = options.nonlocalforage;
+
         // Load the library
         if (typeof Dropbox === "undefined")
             await util.loadScript("https://cdn.jsdelivr.net/npm/dropbox@10.34.0");
 
-        const url = new URL(document.location.href);
         const dbx = new Dropbox.Dropbox({clientId: options.dropbox.clientId});
         const auth: dropboxT.DropboxAuth = (<any> dbx).auth;
 
         // Get the authentication URL
-        url.pathname = url.pathname.replace(/\/[^\/]*$/, "/oauth2-login.html");
-        url.search = "";
-        url.hash = "";
         const state = Math.random().toString(36) + Math.random().toString(36) +
             Math.random().toString(36);
         const aurl = await auth.getAuthenticationUrl(
-            url.toString(), state, "code", "offline", void 0, "none", true
+            oauth2.redirectUrl.toString(), state, "code", "offline", void 0, "none", true
         );
 
         let accessTokenInfo: any = null;
 
         // Try using the saved code
-        if (options.localforage &&
-            (!options.nonlocalforage || !options.nonlocalforage.forcePrompt)) {
+        if (options.localforage && !nlfOpts.forcePrompt) {
             try {
                 const savedAT = await options.localforage.getItem("dropbox-access-token");
                 const savedRT = await options.localforage.getItem("dropbox-refresh-token");
@@ -82,40 +81,13 @@ async function _initStorage(
 
         // If we didn't authenticate, get a new code
         if (!accessTokenInfo) {
-            await options.nonlocalforage.transientActivation();
-
-            // Open an authentication iframe
-            const authWin = window.open(
-                url.toString(), "", "popup,width=480,height=640"
-            )!;
-            await new Promise((res, rej) => {
-                authWin.onload = res;
-                authWin.onerror = rej;
-                authWin.onclose = rej;
-            });
-            authWin.postMessage({
-                dropbox: true,
-                authUrl: aurl
-            });
+            await nlfOpts.transientActivation();
 
             // Wait for the access token
-            const code: string = await new Promise((res, rej) => {
-                function onmessage(ev: MessageEvent) {
-                    if (ev.data && ev.data.oauth2 && ev.data.state === state) {
-                        removeEventListener("message", onmessage);
-                        res(ev.data.code);
-                    }
-                }
-
-                addEventListener("message", onmessage);
-                authWin.onclose = rej;
-            });
-
-            authWin.onclose = null;
-            authWin.close();
+            const codeInfo = await oauth2.authWin(nlfOpts, aurl.toString(), state);
 
             accessTokenInfo = await auth.getAccessTokenFromCode(
-                url.toString(), code
+                oauth2.redirectUrl.toString(), codeInfo.code
             );
             auth.setAccessToken(accessTokenInfo.result.access_token);
             auth.setRefreshToken(accessTokenInfo.result.refresh_token);

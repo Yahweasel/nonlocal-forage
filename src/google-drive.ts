@@ -14,8 +14,10 @@
  */
 
 import type * as localforageT from "localforage";
-import * as oauth2 from "@badgateway/oauth2-client";
+import * as bgoauth2 from "@badgateway/oauth2-client";
 
+import * as oauth2 from "./oauth2";
+import * as nlfOptions from "./nlf-options";
 import * as ser from "./serializer";
 import * as util from "./util";
 
@@ -62,45 +64,6 @@ async function fileList(dir = "root", name = "") {
     return files;
 }
 
-const redirectUrl = new URL(document.location.href);
-redirectUrl.pathname = redirectUrl.pathname.replace(/\/[^\/]*$/, "/oauth2-login.html");
-redirectUrl.search = "";
-redirectUrl.hash = "";
-
-async function authWin(authUrl: string, state: string): Promise<any> {
-    // Open an authentication window
-    const authWin = window.open(
-        redirectUrl.toString(), "", "popup,width=480,height=640"
-    )!;
-    await new Promise((res, rej) => {
-        authWin.onload = res;
-        authWin.onerror = rej;
-        authWin.onclose = rej;
-    });
-    authWin.postMessage({
-        oauth2: true,
-        authUrl
-    });
-
-    // Wait for the info
-    const info = await new Promise((res, rej) => {
-        function onmessage(ev: MessageEvent) {
-            if (ev.data && ev.data.oauth2 && ev.data.state === state) {
-                removeEventListener("message", onmessage);
-                res(ev.data);
-            }
-        }
-
-        addEventListener("message", onmessage);
-        authWin.onclose = rej;
-    });
-
-    authWin.onclose = null;
-    authWin.close();
-
-    return info;
-}
-
 async function _initStorage(
     this: LocalforageGoogleDrive,
     options: any
@@ -128,26 +91,26 @@ async function _initStorage(
         loginHint = await options.localforage.getItem("google-drive-login");
 
     // General info
+    const nlfOpts: nlfOptions.NonlocalforageOptions = options.nonlocalforage;
     let accessToken: string | null = null;
     let refreshToken: string | null = null;
     let expiresAt: number | null = null;
     let tokenAuthUrl: URL | null = null;
 
-    try {
     // Choose login method
     if (options.googleDrive.codeServer) {
         // Use the code method
         const authUrl = tokenAuthUrl = new URL(
             options.googleDrive.codeServer, document.location.href
         );
-        const oauth2Client = new oauth2.OAuth2Client({
+        const oauth2Client = new bgoauth2.OAuth2Client({
             clientId: options.googleDrive.clientId,
             server: "https://accounts.google.com",
             discoveryEndpoint: "/.well-known/openid-configuration"
         });
 
         // Try using a saved token
-        if (options.localforage && (!options.nonlocalforage || !options.nonlocalforage.forcePrompt))
+        if (options.localforage && !nlfOpts.forcePrompt)
             refreshToken = await options.localforage.getItem("google-drive-refresh-token");
         if (refreshToken) {
             try {
@@ -166,7 +129,7 @@ async function _initStorage(
             const state = Math.random().toString(36) + Math.random().toString(36) +
                 Math.random().toString(36);
             const authUrl = await oauth2Client.authorizationCode.getAuthorizeUri({
-                redirectUri: redirectUrl.toString(),
+                redirectUri: oauth2.redirectUrl.toString(),
                 state,
                 scope,
                 extraParams: {
@@ -176,15 +139,15 @@ async function _initStorage(
                 }
             });
 
-            await options.nonlocalforage.transientActivation();
-            const code = (await authWin(authUrl, state)).code;
+            await nlfOpts.transientActivation();
+            const code = (await oauth2.authWin(nlfOpts, authUrl, state)).code;
 
             // Trade it for an access token and refresh token
             const codeUrl = new URL(
                 options.googleDrive.codeServer, document.location.href
             );
             codeUrl.searchParams.set("code", code);
-            codeUrl.searchParams.set("redirectUri", redirectUrl.toString());
+            codeUrl.searchParams.set("redirectUri", oauth2.redirectUrl.toString());
             const f = await fetch(codeUrl.toString());
             const tokenInfo = await f.json();
             accessToken = tokenInfo.access_token;
@@ -203,18 +166,18 @@ async function _initStorage(
             Math.random().toString(36);
         const authUrl = tokenAuthUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
         authUrl.searchParams.set("client_id", options.googleDrive.clientId);
-        authUrl.searchParams.set("redirect_uri", redirectUrl.toString());
+        authUrl.searchParams.set("redirect_uri", oauth2.redirectUrl.toString());
         authUrl.searchParams.set("response_type", "token");
         authUrl.searchParams.set("scope", scope.join(" "));
         authUrl.searchParams.set("state", state);
         authUrl.searchParams.set("include_granted_scopes", "true");
-        if (loginHint && (!options.nonlocalforage || !options.nonlocalforage.forcePrompt))
+        if (loginHint && !nlfOpts.forcePrompt)
             authUrl.searchParams.set("login_hint", loginHint);
         else
             authUrl.searchParams.set("prompt", "select_account");
 
-        await options.nonlocalforage.transientActivation();
-        const tokenInfo = await authWin(authUrl.toString(), state);
+        await nlfOpts.transientActivation();
+        const tokenInfo = await oauth2.authWin(nlfOpts, authUrl.toString(), state);
         accessToken = tokenInfo.accessToken;
         expiresAt = new Date().getTime() + (+tokenInfo.expiresIn) * 1000;
 
@@ -235,7 +198,6 @@ async function _initStorage(
     // Handle timeout
     const timeoutRelogin = async () => {
         this._gd.promise = this._gd.promise.catch(console.error).then(async () => {
-            try {
             if (options.googleDrive.codeServer) {
                 // Just refresh the existing code
                 const f = await fetch(tokenAuthUrl!.toString());
@@ -253,22 +215,16 @@ async function _initStorage(
                 tokenAuthUrl!.searchParams.set("login_hint", userInfo.result.email);
 
                 try {
-                    tokenInfo = await authWin(tokenAuthUrl!.toString(), state);
+                    tokenInfo = await oauth2.authWin(nlfOpts, tokenAuthUrl!.toString(), state);
                 } catch (ex) {
-                    await (
-                        options.nonlocalforage.lateTransientActivation ||
-                            options.nonlocalforage.transientActivation
-                    )();
-                    tokenInfo = await authWin(tokenAuthUrl!.toString(), state);
+                    await (nlfOpts.lateTransientActivation ||
+                           nlfOpts.transientActivation)();
+                    tokenInfo = await oauth2.authWin(nlfOpts, tokenAuthUrl!.toString(), state);
                 }
 
                 accessToken = tokenInfo.accessToken;
                 expiresAt = new Date().getTime() + (+tokenInfo.expiresIn) * 1000;
 
-            }
-            } catch (ex) {
-                console.error(ex);
-                throw ex;
             }
             setTimeout(timeoutRelogin, expiresAt! - new Date().getTime() - 600000);
         });
@@ -299,11 +255,6 @@ async function _initStorage(
     this._gd.name = options.name || "default";
     this._gd.path = path;
     this._gd.dirId = curDir;
-
-    } catch (ex) {
-        console.error(ex);
-        throw ex;
-    }
 }
 
 function iterate(
