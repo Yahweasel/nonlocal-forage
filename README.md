@@ -62,6 +62,18 @@ const nllf = await localforage.createInstance({
          * again. */
         lateTransientActivation: ...,
 
+        /* Optional (but highly recommended, particularly if you use CORS)
+         * function to show a cancellation dialog. When CORS is active, there's
+         * no way to know if the login screen has been closed. Thus, it's
+         * necessary to allow the user to tell the system that they've given up
+         * on logging in. This should be a function that returns a promise that
+         * *only resolves* if the user has chosen to cancel. */
+        cancellable: ...,
+
+        /* If cancellable is set, this should be a function that hides the
+         * cancellation dialog shown by cancellable. */
+        hideCancellable: ...,
+
         /* Optional directory name to use as a root for all nonlocalForage data
          * on this service. If not specified, the directory name
          * "nonlocalForage" will be used. */
