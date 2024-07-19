@@ -4,6 +4,9 @@
   "description": "localForage drivers for NON-local storage, to the user's cloud storage",
   "main": "dist/nonlocalforage.js",
   "devDependencies": {
+    "@badgateway/oauth2-client": "^2.3.0",
+    "@rollup/plugin-commonjs": "^26.0.1",
+    "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^11.1.6",
     "dropbox": "^10.34.0",

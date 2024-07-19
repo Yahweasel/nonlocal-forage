@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Logging in...</title>
+        <meta charset="utf8" />
+    </head>
+    <body>
+        <script type="text/javascript">(function() {
+            var url = new URL(document.location.href);
+            var code = null, accessToken = null, expiresIn = null, state = null;
+            try {
+                code = url.searchParams.get("code");
+                state = url.searchParams.get("state");
+            } catch (ex) {}
+            if (!code) {
+                try {
+                    const hashParams = new URLSearchParams(url.hash.slice(1));
+                    accessToken = hashParams.get("access_token");
+                    expiresIn = hashParams.get("expires_in");
+                    state = hashParams.get("state");
+                } catch (ex) {}
+            }
+            if (code || accessToken) {
+                (window.opener||window.parent).postMessage({
+                    oauth2: true,
+                    url: document.location.href,
+                    code: code,
+                    accessToken: accessToken,
+                    expiresIn: expiresIn,
+                    state: state
+                });
+            } else {
+                window.addEventListener("message", function(ev) {
+                    if (ev.data && ev.data.oauth2 && ev.data.authUrl)
+                        document.location.href = ev.data.authUrl;
+                });
+            }
+        })();</script>
+    </body>
+</html>
