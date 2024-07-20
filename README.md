@@ -4,7 +4,7 @@ This is a set of drivers for
 [localForage](https://github.com/localForage/localForage) to make its storage
 non-local. More precisely, it is a set of drivers for using cloud storage
 services as a backend for “local” storage. At present, it supports using Google
-Drive or Dropbox as backends.
+Drive, Dropbox, or WebDAV as backends.
 
 
 ## General Approach
@@ -213,3 +213,42 @@ It also must be a valid redirect URI for your Dropbox API project.
 
 Files are stored in
 `Apps/<application name>/<nonlocalforage.directory>/<options.name>/<options.storeName>/<key>`.
+
+
+## WebDAV
+
+The WebDAV driver is exposed as nonlocalForage.webDAVLocalForage. Define it
+like so:
+
+```js
+await localforage.defineDriver(NonlocalForage.webDAVLocalForage);
+```
+
+To create an instance, use the driver name `"webDAV"`, and include a `webDAV`
+field in the options as an object with the `username`, `password`, and `server`
+fields set, like so:
+
+```js
+const wdlf = await localforage.createInstance({
+    driver: "webDAV",
+    webDAV: {
+        username: "WebDAV username",
+        password: "WebDAV password",
+        server: "WebDAV server URL"
+    }
+});
+await wdlf.ready();
+```
+
+As WebDAV uses a username and password, it's up to you to prompt for them. It
+does not use a prompt, and does not use the keystore.
+
+Files are stored in
+`<nonlocalforage.directory>/<options.name>/<options.storeName>/<key>`.
+
+The WebDAV backend was intended for use with ownCloud and Nextcloud. You should
+advise users to add an “app password” for your app, and to add your domain to
+the list of “CORS domains”.
+
+The WebDAV backend uses [Perry Mitchell's WebDAV
+client](https://github.com/perry-mitchell/webdav-client/) to access WebDAV.
