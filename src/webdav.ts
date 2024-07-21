@@ -136,9 +136,11 @@ function removeItem(
     key: string, callback?: ()=>unknown
 ) {
     const p = this._dav.promise.catch(console.error).then(async () => {
-        await this._dav.dav.deleteFile(
-            `${this._dav.dir}/${ser.safeify(key)}`
-        );
+        const dav: any = this._dav.dav;
+        const name =
+            `${this._dav.dir}/${ser.safeify(key)}`;
+        if (await dav.exists(name))
+            await dav.deleteFile(name);
         if (callback)
             callback();
     });
