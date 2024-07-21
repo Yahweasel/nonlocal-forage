@@ -251,9 +251,11 @@ function removeItem(
 ) {
     const p = this._dbx.promise.catch(console.error).then(async () => {
         const dbx = <dropboxT.Dropbox> this._dbx.dbx;
-        await dbx.filesDeleteV2({
-            path: `${this._dbx.dir}/${ser.safeify(key)}`
-        });
+        try {
+            await dbx.filesDeleteV2({
+                path: `${this._dbx.dir}/${ser.safeify(key)}`
+            });
+        } catch (ex) {}
         if (callback)
             callback();
     });
