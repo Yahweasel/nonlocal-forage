@@ -1,7 +1,7 @@
 <?JS
 /*
  * This (un)license applies only to this sample code, and not to
- * libavjs-webcodecs-polyfill as a whole:
+ * nonlocal-forage as a whole:
  *
  * This is free and unencumbered software released into the public domain.
  *
@@ -92,7 +92,7 @@ qParams.set("client_id", googleInfo.clientId);
 qParams.set("client_secret", googleInfo.clientSecret);
 
 // Make the request
-const resp = await new Promise(async res => {
+const resp = await new Promise(res => {
     const req = https.request(
         "https://oauth2.googleapis.com/token",
         {
