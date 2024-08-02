@@ -227,6 +227,25 @@ function dropInstance(
     return p;
 }
 
+function storageEstimate(this: LocalforageWebDAV) {
+    const p = this._dav.promise.catch(console.error).then(async () => {
+        const quota = await this._dav.dav.getQuota();
+        if (!quota) {
+            return {
+                quota: 1/0,
+                usage: 0
+            };
+        } else {
+            return {
+                quota: (quota.available === "unlimited") ? 1/0 : +quota.available,
+                usage: +quota.used
+            };
+        }
+    });
+    this._dav.promise = p;
+    return p;
+}
+
 export const webDAVLocalForage = {
     _driver: "webDAV",
     _support: true,
@@ -239,5 +258,6 @@ export const webDAVLocalForage = {
     length,
     key,
     keys,
-    dropInstance
+    dropInstance,
+    storageEstimate
 };

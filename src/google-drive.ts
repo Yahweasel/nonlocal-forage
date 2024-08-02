@@ -26,9 +26,11 @@ declare let gapi: any, google: any;
 
 const dirMime = "application/vnd.google-apps.folder";
 
+// Global Google Drive data
+let promise: Promise<unknown> = Promise.all([]);
+let loggedIn = false;
+
 interface GoogleDriveData {
-    promise: Promise<unknown>;
-    name: string;
     path: string;
     dirId: string;
 }
@@ -64,22 +66,7 @@ async function fileList(dir = "root", name = "") {
     return files;
 }
 
-async function _initStorage(
-    this: LocalforageGoogleDrive,
-    options: any
-) {
-    // Load libraries
-    if (typeof gapi === "undefined")
-        await util.loadScript("https://apis.google.com/js/api.js");
-    await new Promise(res => gapi.load("client", res));
-    await gapi.client.init({
-        apiKey: options.googleDrive.apiKey,
-        discoveryDocs: [
-            "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
-            "https://www.googleapis.com/discovery/v1/apis/oauth2/v1/rest"
-        ],
-    });
-
+async function logIn(options: any) {
     const scope = [
         "https://www.googleapis.com/auth/drive.file",
         "https://www.googleapis.com/auth/userinfo.email"
@@ -190,14 +177,9 @@ async function _initStorage(
     if (options.localforage)
         await options.localforage.setItem("google-drive-login", userInfo.result.email);
 
-    // Prepare serialization promise
-    this._gd = <any> {
-        promise: Promise.all([])
-    };
-
     // Handle timeout
     const timeoutRelogin = async () => {
-        this._gd.promise = this._gd.promise.catch(console.error).then(async () => {
+        promise = promise.catch(console.error).then(async () => {
             if (options.googleDrive.codeServer) {
                 // Just refresh the existing code
                 const f = await fetch(tokenAuthUrl!.toString());
@@ -230,28 +212,63 @@ async function _initStorage(
         });
     };
     setTimeout(timeoutRelogin, expiresAt! - new Date().getTime() - 600000);
+}
+
+async function _initStorage(
+    this: LocalforageGoogleDrive,
+    options: any
+) {
+    // Load libraries
+    if (typeof gapi === "undefined")
+        await util.loadScript("https://apis.google.com/js/api.js");
+    if (!gapi.client)
+        await new Promise(res => gapi.load("client", res));
+    if (!gapi.client.drive || !gapi.client.oauth2) {
+        await gapi.client.init({
+            apiKey: options.googleDrive.apiKey,
+            discoveryDocs: [
+                "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+                "https://www.googleapis.com/discovery/v1/apis/oauth2/v1/rest"
+            ]
+        });
+    }
+
+    this._gd = <any> {};
+
+    if (!loggedIn) {
+        loggedIn = true;
+        try {
+            await logIn(options);
+        } catch (ex) {
+            loggedIn = false;
+            throw ex;
+        }
+    }
 
     // Create the store path
     const path = util.cloudDirectory(options);
     let curDir = "root";
-    for (const part of path.split("/")) {
-        const files = await fileList(curDir, part);
-        let nextDir: string | null =
-            files.length ? files[0].id : null;
+    const p = promise.catch(console.error).then(async () => {
+        for (const part of path.split("/")) {
+            const files = await fileList(curDir, part);
+            let nextDir: string | null =
+                files.length ? files[0].id : null;
 
-        if (!nextDir) {
-            // Didn't find the directory, so create it
-            const resp = await gapi.client.drive.files.create({
-                name: part,
-                parents: [curDir],
-                mimeType: dirMime
-            });
-            nextDir = resp.result.id;
+            if (!nextDir) {
+                // Didn't find the directory, so create it
+                const resp = await gapi.client.drive.files.create({
+                    name: part,
+                    parents: [curDir],
+                    mimeType: dirMime
+                });
+                nextDir = resp.result.id;
+            }
+
+            curDir = nextDir!;
         }
-
-        curDir = nextDir!;
-    }
-    this._gd.name = options.name || "default";
+    });
+    promise = p;
+    await p;
     this._gd.path = path;
     this._gd.dirId = curDir;
 }
@@ -261,7 +278,7 @@ function iterate(
     iteratorCallback: (key: string) => any,
     successCallback?: () => unknown
 ) {
-    const p = this._gd.promise.catch(console.error).then(async () => {
+    const p = promise.catch(console.error).then(async () => {
         const files = await fileList(this._gd.dirId);
         for (const file of files) {
             const value = await getItemById(file.id);
@@ -273,7 +290,7 @@ function iterate(
         if (successCallback)
             successCallback();
     });
-    this._gd.promise = p;
+    promise = p;
     return p;
 }
 
@@ -281,7 +298,7 @@ function getItem(
     this: LocalforageGoogleDrive,
     key: string, callback?: (value: any)=>unknown
 ) {
-    const p = this._gd.promise.catch(console.error).then(async () => {
+    const p = promise.catch(console.error).then(async () => {
         // Look for a connected file
         const files = await fileList(this._gd.dirId, ser.safeify(key));
         if (!files.length) {
@@ -295,7 +312,7 @@ function getItem(
             callback(value);
         return value;
     });
-    this._gd.promise = p;
+    promise = p;
     return p;
 }
 
@@ -319,7 +336,7 @@ function setItem(
     this: LocalforageGoogleDrive,
     key: string, value: any, callback?: ()=>unknown
 ) {
-    const p = this._gd.promise.catch(console.error).then(async () => {
+    const p = promise.catch(console.error).then(async () => {
         // Serialize
         const keySer = ser.safeify(key);
         const valSer = ser.serialize(value);
@@ -354,7 +371,7 @@ function setItem(
         if (callback)
             callback();
     });
-    this._gd.promise = p;
+    promise = p;
     return p;
 }
 
@@ -362,7 +379,7 @@ function removeItem(
     this: LocalforageGoogleDrive,
     key: string, callback?: ()=>unknown
 ) {
-    const p = this._gd.promise.catch(console.error).then(async () => {
+    const p = promise.catch(console.error).then(async () => {
         const files = await fileList(this._gd.dirId, ser.safeify(key));
         for (const file of files) {
             await gapi.client.drive.files.delete({
@@ -373,7 +390,7 @@ function removeItem(
         if (callback)
             callback();
     });
-    this._gd.promise = p;
+    promise = p;
     return p;
 }
 
@@ -388,13 +405,13 @@ function length(
     this: LocalforageGoogleDrive,
     callback?: (len: number)=>unknown
 ) {
-    const p = this._gd.promise.catch(console.error).then(async () => {
+    const p = promise.catch(console.error).then(async () => {
         const len = (await fileList(this._gd.dirId)).length;
         if (callback)
             callback(len);
         return len;
     });
-    this._gd.promise = p;
+    promise = p;
     return p;
 }
 
@@ -415,14 +432,14 @@ function keys(
     this: LocalforageGoogleDrive,
     callback?: (keys: string[])=>unknown
 ) {
-    const p = this._gd.promise.catch(console.error).then(async () => {
+    const p = promise.catch(console.error).then(async () => {
         const files = await fileList(this._gd.dirId);
         const keys = files.map(x => ser.unsafeify(x.name));
         if (callback)
             callback(keys);
         return keys;
     });
-    this._gd.promise = p;
+    promise = p;
     return p;
 }
 
@@ -437,7 +454,7 @@ function dropInstance(
         options = void 0;
     }
 
-    const p = this._gd.promise.catch(console.error).then(async () => {
+    const p = promise.catch(console.error).then(async () => {
         // Figure out which directory to delete
         let toDelete: string = this._gd.dirId;
         const toDeleteDir = util.dropInstanceDirectory(this._gd.path, options);
@@ -465,7 +482,21 @@ function dropInstance(
         if (callback)
             callback();
     });
-    this._gd.promise = p;
+    promise = p;
+    return p;
+}
+
+function storageEstimate(this: LocalforageGoogleDrive) {
+    const p = promise.catch(console.error).then(async () => {
+        const about = await gapi.client.drive.about.get({
+            fields: "storageQuota"
+        });
+        return {
+            quota: +about.result.storageQuota.limit || 1/0,
+            usage: +about.result.storageQuota.usage
+        };
+    });
+    promise = p;
     return p;
 }
 
@@ -481,5 +512,6 @@ export const googleDriveLocalForage = {
     length,
     key,
     keys,
-    dropInstance
+    dropInstance,
+    storageEstimate
 };

@@ -20,7 +20,7 @@ await localforage.defineDriver(NonlocalForage.cacheForage);
 
 Then load your other nonlocal storage drivers.
 
-Each nonlocalForage driver requires an actually local localForage instance for
+Most nonlocalForage driver requires an actually local localForage instance for
 storing temporary data such as tokens and keys. This can be the default
 localforage instance, but this is not recommended.
 
@@ -118,6 +118,14 @@ Regardless of the backend, entries are stores as files, with the name
 corresponding to the key, serialized to be safe on most platforms. The content
 is also serialized; see `src/serializer.ts` for details on how data is
 serialized.
+
+Nonlocal backends—that is, every backend provided by this library other than
+cacheForage—additionally provide one extra method not normally in localForage:
+`storageEstimate`. `await lf.storageEstimate()` returns an object in the form
+of `navigator.storage.estimate()`. It has a `quota` field and a `usage` field,
+referencing the number of bytes of storage maximum provided by the backend, and
+the number of bytes used, respectively. This method is correctly named: it is
+an *estimate*.
 
 
 ## Google Drive
