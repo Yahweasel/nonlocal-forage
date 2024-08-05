@@ -11,6 +11,11 @@ FileSystemDirectoryHandles), simply because all of the cloud backends are based
 on the principle of using files within a directory structure, so it made sense
 to do the same with an actual directory structure.
 
+Because the nonlocal storage may be shared, it makes sense to combine this with
+[lockableForage](https://github.com/Yahweasel/lockable-forage). If you do, make
+sure to set the timeout time quite high (say, 10 seconds), as clock skew will
+interfere with locking.
+
 
 ## General Approach
 
@@ -139,6 +144,11 @@ of `navigator.storage.estimate()`. It has a `quota` field and a `usage` field,
 referencing the number of bytes of storage maximum provided by the backend, and
 the number of bytes used, respectively. This method is correctly named: it is
 an *estimate*.
+
+If you are using [lockableForage](https://github.com/Yahweasel/lockable-forage),
+make sure to initialize it with the backend localforage, *not* the caching
+localforage. Anything that needs to be controlled by locks should be accessed
+directly, uncached.
 
 
 ## Google Drive
