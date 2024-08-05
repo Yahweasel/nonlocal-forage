@@ -6,11 +6,16 @@ non-local. More precisely, it is a set of drivers for using cloud storage
 services as a backend for “local” storage. At present, it supports using Google
 Drive, Dropbox, or WebDAV as backends.
 
+It also has a FileSystemDirectoryHandle backend (i.e., a backend for use with
+FileSystemDirectoryHandles), simply because all of the cloud backends are based
+on the principle of using files within a directory structure, so it made sense
+to do the same with an actual directory structure.
+
 
 ## General Approach
 
 Nonlocal Forage declares a global namespace `NonlocalForage` which contains a
-number of drivers. You should *always* use the `cacheForage` driver, which is a
+number of drivers. You should usually use the `cacheForage` driver, which is a
 caching driver for using local storage as a fast temporary cache for cloud
 storage. Load it like so:
 
@@ -78,6 +83,14 @@ const nllf = await localforage.createInstance({
          * on this service. If not specified, the directory name
          * "nonlocalForage" will be used. */
         directory: "nonlocalForage",
+
+        /* Normally, cloud backends use the directory above, plus the normal
+         * `options.name`, plus `options.storeName`, to choose a directory. Set
+         * this to true to ignore `options.name`. */
+        noName: false,
+
+        /* Set this to true to ignore `options.storeName`. */
+        noStore: false,
 
         /* If set to a truthy value, will force a login prompt, rather than
          * logging in with saved credentials. For instance, when using Google
@@ -260,3 +273,29 @@ the list of “CORS domains”.
 
 The WebDAV backend uses [Perry Mitchell's WebDAV
 client](https://github.com/perry-mitchell/webdav-client/) to access WebDAV.
+
+
+## FileSystemDirectoryHandle
+
+The FileSystemDirectoryHandle driver is exposed as
+nonlocalForage.fsdhLocalForage. Define it like so:
+
+```js
+await localforage.defineDriver(NonlocalForage.fsdhForage);
+```
+
+To create an instance, use the driver name `"FileSystemDirectoryHandle"`, and
+include a `directoryHandle` field in the options as the base directory handle
+to use. It must already have permissions; it's up to you to establish all
+necessary permissions before creating an instance.
+
+```js
+const fsdhlf = await localforage.createInstance({
+    driver: "FileSystemDirectoryHandle",
+    directoryHandle: dirHandle
+});
+await fsdhlf.ready();
+```
+
+Files are stored in
+`<base directory>/<nonlocalforage.directory>/<options.name>/<options.storeName>/<key>`.

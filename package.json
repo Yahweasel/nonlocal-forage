@@ -3,6 +3,7 @@
   "version": "0.0.3",
   "description": "localForage drivers for NON-local storage, to the user's cloud storage",
   "main": "dist/nonlocalforage.js",
+  "types": "src/main.ts",
   "devDependencies": {
     "@badgateway/oauth2-client": "^2.3.0",
     "@rollup/plugin-commonjs": "^26.0.1",

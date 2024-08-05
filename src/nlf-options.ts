@@ -50,6 +50,17 @@ export interface NonlocalforageOptions {
     directory?: string;
 
     /**
+     * Don't use the "name" component of options when creating a directory.
+     */
+    noName?: boolean;
+
+    /**
+     * Don't use the "storeName" component of options when creating a
+     * directory.
+     */
+    noStore?: boolean;
+
+    /**
      * If set to a truthy value, will force a login prompt, rather than
      * logging in with saved credentials. For instance, when using Google
      * Drive, this will require the user to actually click their username,

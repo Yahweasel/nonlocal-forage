@@ -29,10 +29,10 @@ export function cloudDirectory(options: any) {
     let ret: string = "nonlocalForage";
     if (options.nonlocalforage && options.nonlocalforage.directory)
         ret = options.nonlocalforage.directory;
-    ret += `/${options.name ? ser.safeify(options.name) : "default"}`;
-    if (!options.nonlocalForage || !options.nonlocalForage.noStore) {
+    if (!options.nonlocalforage || !options.nonlocalforage.noName)
+        ret += `/${options.name ? ser.safeify(options.name) : "default"}`;
+    if (!options.nonlocalforage || !options.nonlocalforage.noStore)
         ret += `/${options.storeName ? ser.safeify(options.storeName) : "default"}`;
-    }
     return ret;
 }
 
