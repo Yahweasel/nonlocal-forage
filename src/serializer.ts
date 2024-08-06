@@ -133,6 +133,23 @@ export function deserialize(data: Uint8Array) {
 }
 
 /**
+ * Get a (very rough) approximation of the size of this data in bytes when
+ * serialized.
+ */
+export function approxSize(data: any) {
+    if (data && data.buffer && data.buffer instanceof ArrayBuffer) {
+        return data.buffer.byteLength;
+
+    } else if (data instanceof ArrayBuffer) {
+        return data.byteLength;
+
+    } else {
+        return JSON.stringify(data).length;
+
+    }
+}
+
+/**
  * Make a "safe" version of this string for filename purposes.
  * @param key  String to turn into a safe filename
  */

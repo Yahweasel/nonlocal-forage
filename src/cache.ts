@@ -13,30 +13,35 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+import * as ser from "./serializer";
+
 import type * as localforageT from "localforage";
+import * as lkf from "lockable-forage";
 
 export interface CacheForage {
     localPromise: Promise<unknown>,
     nonlocalPromise: Promise<unknown>,
-    local: typeof localforageT,
+    local: lkf.LockableForage,
     nonlocal: typeof localforageT,
-    error: any
+    error: any,
+    cachedSize: number
 }
 
 type LocalforageCacheForage = typeof localforageT & {
-    cacheForage: CacheForage
+    _cf: CacheForage
 };
 
 async function _initStorage(
     this: LocalforageCacheForage,
     options: any
 ) {
-    this.cacheForage = {
+    this._cf = {
         localPromise: Promise.all([]),
         nonlocalPromise: Promise.all([]),
-        local: options.cacheForage.local,
+        local: new lkf.LockableForage(options.cacheForage.local),
         nonlocal: options.cacheForage.nonlocal,
-        error: null
+        error: null,
+        cachedSize: 0
     };
 }
 
@@ -45,12 +50,12 @@ async function iterate(
     iteratorCallback: (key: string) => any,
     successCallback: () => unknown
 ) {
-    const cf = this.cacheForage;
+    const cf = this._cf;
     if (cf.error)
         throw cf.error;
 
     const promise = cf.nonlocalPromise.then(async () => {
-        await cf.local.iterate(iteratorCallback);
+        await cf.local.localforage.iterate(iteratorCallback);
         await cf.nonlocal.iterate(iteratorCallback);
     });
     cf.nonlocalPromise = promise.catch(x => cf.error = x);
@@ -64,12 +69,12 @@ async function getItem(
     this: LocalforageCacheForage,
     key: string, callback?: (value:any)=>unknown
 ) {
-    const cf = this.cacheForage;
+    const cf = this._cf;
     if (cf.error)
         throw cf.error;
 
     const localPromise = cf.localPromise.then(() => {
-        return cf.local.getItem(key);
+        return cf.local.localforage.getItem(key);
     });
     cf.localPromise = localPromise.catch(x => cf.error = x);
     let value = await localPromise;
@@ -92,26 +97,30 @@ async function setItem(
     this: LocalforageCacheForage,
     key: string, value: any, callback?: ()=>unknown
 ) {
-    const cf = this.cacheForage;
+    const cf = this._cf;
     if (cf.error)
         throw cf.error;
 
-    const localPromise = cf.localPromise.then(() =>  {
-        return cf.local.setItem(key, value);
+    const sz = ser.approxSize(value);
+    this._cf.cachedSize += sz;
+
+    const localPromise = cf.localPromise.then(async () =>  {
+        await cf.local.lock(key, async () => {
+            await cf.local.localforage.setItem(key, value);
+        });
     });
     cf.localPromise = localPromise.catch(x => cf.error = x);
     await localPromise;
     value = null;
 
     cf.nonlocalPromise = cf.nonlocalPromise.then(async () => {
-        const localPromise = cf.localPromise.then(async () => {
-            const value = await cf.local.getItem(key);
+        await cf.local.lock(key, async () => {
+            const value = await cf.local.localforage.getItem(key);
             if (value !== null)
                 await cf.nonlocal.setItem(key, value);
-            await cf.local.removeItem(key);
+            await cf.local.localforage.removeItem(key);
         });
-        cf.localPromise = localPromise.catch(x => cf.error = x);
-        await localPromise;
+        this._cf.cachedSize -= sz;
     }).catch(x => cf.error = x);
 
     if (callback)
@@ -122,12 +131,14 @@ async function removeItem(
     this: LocalforageCacheForage,
     key: string, callback?: ()=>unknown
 ) {
-    const cf = this.cacheForage;
+    const cf = this._cf;
     if (cf.error)
         throw cf.error;
 
-    const lp = cf.localPromise.then(() => {
-        return cf.local.removeItem(key);
+    const lp = cf.localPromise.then(async () => {
+        await cf.local.lock(key, async () => {
+            await cf.local.localforage.removeItem(key);
+        });
     });
     cf.localPromise = lp.catch(x => cf.error = x);
     const nlp = cf.nonlocalPromise.then(() => {
@@ -146,12 +157,12 @@ async function clear(
     this: LocalforageCacheForage,
     callback?: ()=>unknown
 ) {
-    const cf = this.cacheForage;
+    const cf = this._cf;
     if (cf.error)
         throw cf.error;
 
     const lp = cf.localPromise.then(() => {
-        return cf.local.clear();
+        return cf.local.localforage.clear();
     });
     cf.localPromise = lp.catch(x => cf.error = x);
     const nlp = cf.nonlocalPromise.then(() => {
@@ -193,12 +204,12 @@ async function keys(
     this: LocalforageCacheForage,
     callback?: (keys: string[])=>unknown
 ) {
-    const cf = this.cacheForage;
+    const cf = this._cf;
     if (cf.error)
         throw cf.error;
 
     const lkeysP = cf.localPromise.then(() => {
-        return cf.local.keys();
+        return cf.local.localforage.keys();
     });
     cf.localPromise = lkeysP.catch(x => cf.error = x);
     const nlkeysP = cf.nonlocalPromise.then(() => {
@@ -214,12 +225,12 @@ async function dropInstance(
     options?: {name?: string, storeName?: string},
     callback?: () => unknown
 ) {
-    const cf = this.cacheForage;
+    const cf = this._cf;
     if (cf.error)
         throw cf.error;
 
     const lp = cf.localPromise.then(() => {
-        return cf.local.dropInstance(options);
+        return cf.local.localforage.dropInstance(options);
     });
     cf.localPromise = lp.catch(x => cf.error = x);
     const nlp = cf.nonlocalPromise.then(() => {
@@ -234,6 +245,14 @@ async function dropInstance(
         callback();
 }
 
+function cachedSize(this: LocalforageCacheForage) {
+    return this._cf.cachedSize;
+}
+
+function nonlocalPromise(this: LocalforageCacheForage) {
+    return this._cf.nonlocalPromise;
+}
+
 export const cacheForage = {
     _driver: "cacheForage",
     _support: true,
@@ -246,5 +265,7 @@ export const cacheForage = {
     length,
     key,
     keys,
-    dropInstance
+    dropInstance,
+    cachedSize,
+    nonlocalPromise
 };

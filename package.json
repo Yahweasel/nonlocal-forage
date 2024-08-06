@@ -27,5 +27,8 @@
     "localforage"
   ],
   "author": "Yahweasel",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "lockable-forage": "^0.1.2"
+  }
 }
