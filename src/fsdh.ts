@@ -19,7 +19,7 @@ import * as nlfOptions from "./nlf-options";
 import * as ser from "./serializer";
 import * as util from "./util";
 
-interface FSDHData {
+export interface FSDHData {
     promise: Promise<unknown>;
     root: FileSystemDirectoryHandle,
     path: string,

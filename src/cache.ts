@@ -15,7 +15,7 @@
 
 import type * as localforageT from "localforage";
 
-interface CacheForage {
+export interface CacheForage {
     localPromise: Promise<unknown>,
     nonlocalPromise: Promise<unknown>,
     local: typeof localforageT,

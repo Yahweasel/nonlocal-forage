@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "localForage drivers for NON-local storage, to the user's cloud storage",
   "main": "dist/nonlocalforage.js",
-  "types": "src/main.ts",
+  "types": "nonlocalforage.d.ts",
   "devDependencies": {
     "@badgateway/oauth2-client": "^2.3.0",
     "@rollup/plugin-commonjs": "^26.0.1",
@@ -11,6 +11,7 @@
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^11.1.6",
     "dropbox": "^10.34.0",
+    "dts-bundle-generator": "^9.5.1",
     "localforage": "^1.10.0",
     "rollup": "^4.12.1",
     "tslib": "^2.6.3"

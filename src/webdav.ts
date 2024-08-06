@@ -21,7 +21,7 @@ import * as nlfOptions from "./nlf-options";
 import * as ser from "./serializer";
 import * as util from "./util";
 
-interface WebDAVData {
+export interface WebDAVData {
     promise: Promise<unknown>;
     dav: any;
     dir: string;

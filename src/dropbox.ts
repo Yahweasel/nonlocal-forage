@@ -31,7 +31,7 @@ interface DropboxGlobalData {
 
 const dbById: Record<string, DropboxGlobalData> = Object.create(null);
 
-interface DropboxLocalData {
+export interface DropboxLocalData {
     dbg: DropboxGlobalData;
     dbx: dropboxT.Dropbox;
     dir: string;

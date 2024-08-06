@@ -30,7 +30,7 @@ const dirMime = "application/vnd.google-apps.folder";
 let promise: Promise<unknown> = Promise.all([]);
 let loggedIn = false;
 
-interface GoogleDriveData {
+export interface GoogleDriveData {
     path: string;
     dirId: string;
 }
