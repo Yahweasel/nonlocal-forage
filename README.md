@@ -14,7 +14,9 @@ to do the same with an actual directory structure.
 Because the nonlocal storage may be shared, it makes sense to combine this with
 [lockableForage](https://github.com/Yahweasel/lockable-forage). If you do, make
 sure to set the timeout time quite high (say, 10 seconds), as clock skew will
-interfere with locking.
+interfere with locking. The caching driver uses lockableForage itself, and so
+the `LockableForage` class is exported as `nonlocalForage.LockableForage`. You
+do not need to import it separately.
 
 
 ## General Approach
@@ -114,6 +116,22 @@ await nllf.ready();
 It is very important to `await` the `ready()` method of a nonlocalForage
 instance, as this is where the login actually occurs.
 
+Regardless of the backend, entries are stores as files, with the name
+corresponding to the key, serialized to be safe on most platforms. The content
+is also serialized; see `src/serializer.ts` for details on how data is
+serialized.
+
+Nonlocal backends—that is, every backend provided by this library other than
+cacheForage—additionally provide one extra method not normally in localForage:
+`storageEstimate`. `await lf.storageEstimate()` returns an object in the form
+of `navigator.storage.estimate()`. It has a `quota` field and a `usage` field,
+referencing the number of bytes of storage maximum provided by the backend, and
+the number of bytes used, respectively. This method is correctly named: it is
+an *estimate*.
+
+
+## cacheForage
+
 If you're using cacheForage (which you are strongly advised to), you then need
 to link the nonlocalForage instance with the local caching instance as a
 cacheForage instance like so:
@@ -132,23 +150,21 @@ The cacheForage instance (in this case, `clf`) can be used like any other
 localForage instance, and will transparently use a local copy of data until
 it's uploaded, and the remote copy for anything not cached locally.
 
-Regardless of the backend, entries are stores as files, with the name
-corresponding to the key, serialized to be safe on most platforms. The content
-is also serialized; see `src/serializer.ts` for details on how data is
-serialized.
-
-Nonlocal backends—that is, every backend provided by this library other than
-cacheForage—additionally provide one extra method not normally in localForage:
-`storageEstimate`. `await lf.storageEstimate()` returns an object in the form
-of `navigator.storage.estimate()`. It has a `quota` field and a `usage` field,
-referencing the number of bytes of storage maximum provided by the backend, and
-the number of bytes used, respectively. This method is correctly named: it is
-an *estimate*.
-
 If you are using [lockableForage](https://github.com/Yahweasel/lockable-forage),
 make sure to initialize it with the backend localforage, *not* the caching
 localforage. Anything that needs to be controlled by locks should be accessed
 directly, uncached.
+
+The cacheForage driver provides two methods in addition to the standard
+localForage methods:
+
+Use `clf.cachedSize()` to get the amount of data, in bytes (estimated),
+currently in the cache that has not yet been flushed to the server. Note that
+it is not necessary to `await` this; `cachedSize` is not asynchronous.
+
+Use `clf.nonlocalPromise()` to get the promise for the nonlocal side. `await`
+this to ensure that all data written to the cache (at the time this was called)
+is flushed.
 
 
 ## Google Drive
