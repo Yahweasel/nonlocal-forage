@@ -1,4 +1,5 @@
-/*
+// SPDX-License-Identifier: ISC
+/*!
  * Copyright (c) 2024 Yahweasel
  *
  * Permission to use, copy, modify, and/or distribute this software for any
