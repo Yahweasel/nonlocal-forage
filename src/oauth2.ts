@@ -21,22 +21,39 @@ redirectUrl.pathname = redirectUrl.pathname.replace(/\/[^\/]*$/, "/oauth2-login.
 redirectUrl.search = "";
 redirectUrl.hash = "";
 
+function windowOpen(url: string, features: string, onclose: ()=>void) {
+    const win = window.open(url, "", features)!;
+    if (!win)
+        return Promise.reject(new Error("Failed to open popup"));
+    const closedInterval = setInterval(() => {
+        if (win.closed) {
+            clearInterval(closedInterval);
+            onclose();
+        }
+    }, 250);
+}
+
 export async function authWin(
-    nlfOpts: nlfOptions.NonlocalforageOptions, authUrl: string, state: string
+    nlfOpts: nlfOptions.NonlocalforageOptions, authUrl: string, state: string,
+    opts: {
+        late?: boolean
+    } = {}
 ): Promise<any> {
+    let closeHandler: ()=>void = () => {};
+    function onclose() {
+        return closeHandler();
+    }
+
     // Open an authentication window
-    const authWin = window.open(
-        redirectUrl.toString(), "", "popup,width=480,height=640"
-    )!;
-    await new Promise((res, rej) => {
-        authWin.onload = res;
-        authWin.onerror = rej;
-        authWin.onclose = rej;
-    });
-    authWin.postMessage({
-        oauth2: true,
-        authUrl
-    });
+    if (!nlfOpts.windowOpen) {
+        if (opts.late && nlfOpts.lateTransientActivation)
+            await nlfOpts.lateTransientActivation();
+        else
+            await nlfOpts.transientActivation();
+    }
+    await (nlfOpts.windowOpen || windowOpen)(
+        authUrl, "popup,width=480,height=640", onclose
+    );
 
     // Wait for the info
     const infoPromise = new Promise((res, rej) => {
@@ -50,7 +67,7 @@ export async function authWin(
         }
 
         addEventListener("storage", onstorage);
-        authWin.onclose = () => {
+        closeHandler = () => {
             removeEventListener("storage", onstorage);
             rej();
         };
@@ -70,10 +87,6 @@ export async function authWin(
     }
 
     const info = await infoPromise;
-
-    try {
-        authWin.onclose = null;
-    } catch (ex) {}
-
+    closeHandler = ()=>{};
     return info;
 }

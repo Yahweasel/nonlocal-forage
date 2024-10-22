@@ -111,8 +111,6 @@ async function logIn(options: any) {
 
     // If we didn't authenticate, get a new code
     if (!tokenInfo) {
-        await nlfOpts.transientActivation();
-
         // Wait for the access token
         const codeInfo = await oauth2.authWin(nlfOpts, authUrl, state);
 

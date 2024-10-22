@@ -127,7 +127,6 @@ async function logIn(options: any) {
                 }
             });
 
-            await nlfOpts.transientActivation();
             const code = (await oauth2.authWin(nlfOpts, authUrl, state)).code;
 
             // Trade it for an access token and refresh token
@@ -164,7 +163,6 @@ async function logIn(options: any) {
         else
             authUrl.searchParams.set("prompt", "select_account");
 
-        await nlfOpts.transientActivation();
         const tokenInfo = await oauth2.authWin(nlfOpts, authUrl.toString(), state);
         accessToken = tokenInfo.accessToken;
         expiresAt = new Date().getTime() + (+tokenInfo.expiresIn) * 1000;
@@ -197,13 +195,9 @@ async function logIn(options: any) {
                 tokenAuthUrl!.searchParams.set("prompt", "none");
                 tokenAuthUrl!.searchParams.set("login_hint", userInfo.result.email);
 
-                try {
-                    tokenInfo = await oauth2.authWin(nlfOpts, tokenAuthUrl!.toString(), state);
-                } catch (ex) {
-                    await (nlfOpts.lateTransientActivation ||
-                           nlfOpts.transientActivation)();
-                    tokenInfo = await oauth2.authWin(nlfOpts, tokenAuthUrl!.toString(), state);
-                }
+                tokenInfo = await oauth2.authWin(
+                    nlfOpts, tokenAuthUrl!.toString(), state, {late: true}
+                );
 
                 accessToken = tokenInfo.accessToken;
                 expiresAt = new Date().getTime() + (+tokenInfo.expiresIn) * 1000;

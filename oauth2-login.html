@@ -55,11 +55,6 @@
                 };
                 localStorage.setItem("oauth2-nonlocal-forage-" + state, JSON.stringify(authMsg));
                 window.close();
-            } else {
-                window.addEventListener("message", function(ev) {
-                    if (ev.data && ev.data.oauth2 && ev.data.authUrl)
-                        document.location.href = ev.data.authUrl;
-                });
             }
         })();</script>
     </body>
