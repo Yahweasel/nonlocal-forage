@@ -21,16 +21,10 @@ redirectUrl.pathname = redirectUrl.pathname.replace(/\/[^\/]*$/, "/oauth2-login.
 redirectUrl.search = "";
 redirectUrl.hash = "";
 
-function windowOpen(url: string, features: string, onclose: ()=>void) {
+function windowOpen(url: string, features: string) {
     const win = window.open(url, "", features)!;
     if (!win)
         return Promise.reject(new Error("Failed to open popup"));
-    const closedInterval = setInterval(() => {
-        if (win.closed) {
-            clearInterval(closedInterval);
-            onclose();
-        }
-    }, 250);
 }
 
 export async function authWin(
@@ -39,11 +33,6 @@ export async function authWin(
         late?: boolean
     } = {}
 ): Promise<any> {
-    let closeHandler: ()=>void = () => {};
-    function onclose() {
-        return closeHandler();
-    }
-
     // Open an authentication window
     if (!nlfOpts.windowOpen) {
         if (opts.late && nlfOpts.lateTransientActivation)
@@ -52,7 +41,7 @@ export async function authWin(
             await nlfOpts.transientActivation();
     }
     await (nlfOpts.windowOpen || windowOpen)(
-        authUrl, "popup,width=480,height=640", onclose
+        authUrl, "popup,width=480,height=640"
     );
 
     // Wait for the info
@@ -67,10 +56,6 @@ export async function authWin(
         }
 
         addEventListener("storage", onstorage);
-        closeHandler = () => {
-            removeEventListener("storage", onstorage);
-            rej();
-        };
     });
 
     // Make it cancellable if applicable
@@ -86,7 +71,5 @@ export async function authWin(
             throw new Error("Cancelled");
     }
 
-    const info = await infoPromise;
-    closeHandler = ()=>{};
-    return info;
+    return infoPromise;
 }

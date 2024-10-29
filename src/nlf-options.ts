@@ -32,12 +32,10 @@ export interface NonlocalforageOptions {
     /**
      * Function to call to open a popup window. Set the target to "". This will
      * be called in lieu of transientActivation if (a) it's provided and (b) the
-     * transient activation is needed to open a window. An onclose handler is
-     * required, to know if the process has been cancelled. Note that you cannot
-     * simply set `onclose`. You need to poll the `closed` field.
+     * transient activation is needed to open a window.
      */
     windowOpen?: (
-        url: string, features: string, onclose: ()=>void
+        url: string, features: string
     ) => Promise<void>;
 
     /**
